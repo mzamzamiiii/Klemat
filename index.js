@@ -147,7 +147,7 @@ service.on('ready', async () => {
         setInterval(() => {
             if (canOpenBoxes && !isPaused) {
                 lastBoxCommandTime = Date.now();
-                service.messaging.sendGroupMessage(settings.taskGroupId, "!مد صندوق ضمان وقت ");
+                service.messaging.sendGroupMessage(settings.taskGroupId, "!مد صندوق فتح ");
             }
         }, settings.boxInterval);
     } catch (e) {}
