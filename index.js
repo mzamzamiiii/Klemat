@@ -8,11 +8,11 @@ const settings = {
     taskGroupId: 224 ,  // الروم اللي يلعب فيه مهام 
     depositGroupId: 224 , // الروم اللي يودع فيه 
     minuteInterval: 63 * 1000, //اذا عندك زمني 63 واذا ما عندك 306
-    boxInterval: 3 * 60 * 1000  // يفتح الصناديق كل 3 دقايق 
+    boxInterval: 30 * 60 * 1000  // يفتح الصناديق كل 3 دقايق 
 };
 
 const MY_INFO = {
-    keywords: ["Ꮯଠᴜɴт"], //اكتب اسمك الصحيح هنا
+    keywords: ["أوكسجينه.","أصحابي"], //اكتب اسمك الصحيح هنا
     ownerId: "2481425"  
 };
 
@@ -147,7 +147,7 @@ service.on('ready', async () => {
         setInterval(() => {
             if (canOpenBoxes && !isPaused) {
                 lastBoxCommandTime = Date.now();
-                service.messaging.sendGroupMessage(settings.taskGroupId, "!مد صندوق فتح ");
+                service.messaging.sendGroupMessage(settings.taskGroupId, ".. ");
             }
         }, settings.boxInterval);
     } catch (e) {}
