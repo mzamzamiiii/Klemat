@@ -7,8 +7,8 @@ const { WOLF } = wolfjs;
 const client = new WOLF();
 
 // --- الإعدادات ---
-const TARGET_USER_ID = 76023213; // مُرسل الصور
-const CHANNEL_ID = 18432094;     // القناة
+const TARGET_USER_ID = 76023604; // مُرسل الصور
+const CHANNEL_ID = 224;     // القناة
 const DELAY_MS = 63000;  
 const TARGET_PLAYER_NAME = 'أوكسجيته.'; // الاسم الذي تريد البوت أن يجاوب له فقط
 
