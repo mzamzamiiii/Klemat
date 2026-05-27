@@ -10,7 +10,7 @@ const client = new WOLF();
 const TARGET_USER_ID = 76023213; // مُرسل الصور
 const CHANNEL_ID = 18432094;     // القناة
 const DELAY_MS = 63000;  
-const TARGET_PLAYER_NAME = 'أوكسجينه.'; // الاسم الذي تريد البوت أن يجاوب له فقط
+const TARGET_PLAYER_NAME = 'أوكسجيته.'; // الاسم الذي تريد البوت أن يجاوب له فقط
 
 client.on('ready', async () => {
     console.log(`🚀 البوت متصل! سأجاوب فقط إذا كان اسم اللاعب يحتوي على: ${TARGET_PLAYER_NAME}`);
