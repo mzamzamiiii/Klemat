@@ -74,7 +74,7 @@ client.on('ready', async () => {
     await client.group.joinById(CHANNEL_TASKS);
     await client.group.joinById(CHANNEL_ALLIANCE);
     
-    await requestBoxStatus(); 
+   
     
     /
     // حلقة المهام
