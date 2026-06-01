@@ -11,7 +11,7 @@ const TARGET_USER_ID = 76023604;
 const CHANNEL_TASKS = 224;
 const CHANNEL_ALLIANCE = 224;
 
-// قائمة الأسماء المسموح بها
+// القائمة المسموح بها
 const ALLOWED_PLAYERS = ['أوكسجينه', 'أوكسجيته', 'أوكسجيئه'];
 
 // متغيرات التحكم
@@ -28,6 +28,7 @@ async function requestBoxStatus() {
         isWaitingForBoxStatus = true;
         lastBoxCommandTime = Date.now();
         console.log("📤 تم إرسال طلب !مد صندوق. بانتظار الرد...");
+        // الانتظار لمدة 10 ثوانٍ كحد أقصى للرد
         setTimeout(() => { if (isWaitingForBoxStatus) console.log("⚠️ انتهى وقت انتظار الرد."); isWaitingForBoxStatus = false; }, 10000); 
     } catch (err) {
         console.error("❌ خطأ في طلب الصندوق:", err.message);
@@ -42,6 +43,7 @@ async function manageGuaranteePoints(points, gold, silver, bronze, isReady) {
     console.log(`📊 بدء إدارة نقاط الضمان: ${points}/50 | الحالة: ${isReady ? 'جاهز' : 'غير جاهز'}`);
 
     while (true) {
+        // شرط التوقف: حالة "جاهز" والنقاط بين 40 و 45
         if (isReady && currentPoints >= 40 && currentPoints <= 45) {
             console.log(`✅ تم الوصول للوضع الطبيعي (${currentPoints}/50 و جاهز). التوقف عن الفتح.`);
             break;
@@ -74,8 +76,8 @@ client.on('ready', async () => {
     await client.group.joinById(CHANNEL_TASKS);
     await client.group.joinById(CHANNEL_ALLIANCE);
     
-   
-  
+    await requestBoxStatus(); // طلب الحالة فور التشغيل
+
     // حلقة المهام
     while (true) {
         try {
@@ -89,7 +91,7 @@ client.on('ready', async () => {
 
 // --- استقبال الرسائل ---
 client.on('groupMessage', async (message) => {
-    // 1. نظام Debug
+    // 1. نظام Debug: فحص الرسائل القادمة
     if (message.targetGroupId === CHANNEL_TASKS) {
         if (isWaitingForBoxStatus) {
             console.log(`🔍 [DEBUG] وصلت رسالة من ${message.sourceSubscriberId}: \n${message.body}`);
@@ -99,11 +101,13 @@ client.on('groupMessage', async (message) => {
     // 2. معالجة حالة الصناديق
     if (isWaitingForBoxStatus && message.sourceSubscriberId === TARGET_USER_ID) {
         const body = message.body;
+        
+        // استخراج البيانات
         const bronzeMatch = body.match(/برونزي:\s*(\d+)/);
         const silverMatch = body.match(/فضي:\s*(\d+)/);
         const goldMatch = body.match(/ذهبي:\s*(\d+)/);
         const pointsMatch = body.match(/نقاط الضمان:\s*(\d+)\/50/);
-        const statusMatch = body.match(/حالة الضمان:\s*([^\n\r]+)/);
+        const statusMatch = body.match(/حالة الضمان:\s*([^\n\r]+)/); // تلتقط النص حتى نهاية السطر
         const timeMatch = body.match(/الجهاز الزمني[:\s]+(.*)/);
 
         if (pointsMatch && statusMatch && bronzeMatch && silverMatch && goldMatch) {
@@ -144,11 +148,11 @@ client.on('groupMessage', async (message) => {
 
         const name = await extractPlayerName(buffer);
         
-        // التحقق من وجود أي اسم من القائمة في اسم اللاعب المستخرج
-        const isTargetPlayer = ALLOWED_PLAYERS.some(player => name.toLowerCase().includes(player.toLowerCase()));
+        // التحقق من وجود أي اسم من القائمة المسموحة
+        const isTargetPlayer = ALLOWED_PLAYERS.some(allowedName => name.includes(allowedName));
         
         if (isTargetPlayer) {
-            console.log(`🎯 تم التعرف على لاعب مستهدف: ${name}`);
+            console.log(`🎯 تم العثور على لاعب مستهدف: ${name}`);
             const code = await solveCaptcha(buffer);
             if (code) await client.messaging.sendGroupMessage(message.targetGroupId, `#${code}`);
         }
