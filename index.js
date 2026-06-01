@@ -76,18 +76,29 @@ client.on('ready', async () => {
     await client.group.joinById(CHANNEL_TASKS);
     await client.group.joinById(CHANNEL_ALLIANCE);
     
-    await requestBoxStatus(); // طلب الحالة فور التشغيل
+    // 1. طلب الحالة فور التشغيل
+    await requestBoxStatus(); 
 
-    // حلقة المهام
+    // 2. تكرار طلب !مد صندوق كل 30 دقيقة (1,800,000 مللي ثانية)
+    setInterval(async () => {
+        console.log("⏰ حان وقت التحديث الدوري للصناديق...");
+        await requestBoxStatus();
+    }, 1800000); 
+
+    // 3. حلقة المهام
     while (true) {
         try {
             await client.messaging.sendGroupMessage(CHANNEL_TASKS, '!مد مهام');
             await sleep(2000);
             await client.messaging.sendGroupMessage(CHANNEL_ALLIANCE, '!مد تحالف ايداع كل');
             await sleep(currentInterval);
-        } catch (err) { console.error("❌ خطأ:", err.message); await sleep(5000); }
+        } catch (err) { 
+            console.error("❌ خطأ:", err.message); 
+            await sleep(5000); 
+        }
     }
 });
+
 
 // --- استقبال الرسائل ---
 client.on('groupMessage', async (message) => {
