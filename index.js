@@ -18,10 +18,12 @@ let isSystemActive = false;
 let b = null; 
 let isFarming = false; 
 
-// --- دالة فتح الصناديق ---
+// --- دالة فتح الصناديق (المنطق المضاف) ---
 async function handleBoxFarming(gold, silver, bronze, currentPoints, status) {
     if (isFarming) return;
     const isReady = status.includes('جاهز');
+    
+    // إذا كانت الحالة "جاهز" والنقاط كافية، لا تفتح صناديق
     if (isReady && currentPoints >= 40) return;
 
     isFarming = true;
@@ -29,6 +31,7 @@ async function handleBoxFarming(gold, silver, bronze, currentPoints, status) {
     let g = gold, s = silver, b = bronze;
     let queue = [];
 
+    // ترتيب الأولويات في الفتح
     while (g > 0 || s > 0 || b > 0) {
         if (isReady && p >= 40) break;
         if (g > 0) { queue.push('!مد صندوق فتح ذهبي'); g--; p += 4; }
@@ -47,9 +50,17 @@ async function handleBoxFarming(gold, silver, bronze, currentPoints, status) {
     isFarming = false;
 }
 
-// --- دالة المهام ---
+// --- إدارة المؤقت ---
+function manageTimer() {
+    let intervalMs = isSystemActive ? 64000 : 306000;
+    if (b) clearInterval(b);
+    
+    // تنفيذ المهام فوراً عند تغيير المؤقت
+    performTasks(); 
+    b = setInterval(performTasks, intervalMs);
+}
+
 async function performTasks() {
-    console.log(`[LOG] 🚀 بدء دورة المهام.`);
     try {
         await client.messaging.sendGroupMessage(CHANNEL_TASKS, '!مد مهام');
         await new Promise(r => setTimeout(r, 2000));
@@ -57,15 +68,7 @@ async function performTasks() {
     } catch (e) { console.error(`[ERROR] ${e.message}`); }
 }
 
-// --- إدارة المؤقت ---
-function manageTimer() {
-    let intervalMs = isSystemActive ? 64000 : 306000;
-    if (b) clearInterval(b);
-    performTasks(); 
-    b = setInterval(performTasks, intervalMs);
-}
-
-// --- دوال الكابتشا ---
+// --- الدوال الأساسية (بدون تغيير في منطق الكابتشا) ---
 async function isCaptchaByColor(buffer) {
     const { data, info } = await sharp(buffer).raw().ensureAlpha().toBuffer({ resolveWithObject: true });
     let redPixels = 0;
@@ -131,7 +134,7 @@ client.on('groupMessage', async (message) => {
         return;
     }
 
-    // 2. تحليل الأوامر والزمن
+    // 2. تحليل الأوامر والزمن (هنا يكمن الحل)
     if (message.sourceSubscriberId !== TARGET_USER_ID) return;
     
     const body = message.body;
@@ -141,21 +144,30 @@ client.on('groupMessage', async (message) => {
     const pMatch = body.match(/نقاط الضمان:\s*(\d+)/);
     const statusMatch = body.match(/حالة الضمان[:\s]+(.*)/);
     
-    // الحل الجذري للزمن: توقف عند نهاية السطر
+    // التعديل الجوهري: [^\r\n]+ يضمن قراءة السطر الحالي فقط وعدم التداخل مع السطور التالية
     const timeMatch = body.match(/الجهاز الزمني[:\s]+([^\r\n]+)/);
 
     // معالجة الصناديق
     if (gMatch && pMatch && statusMatch) {
-        handleBoxFarming(parseInt(gMatch[1]), parseInt(body.match(/فضي:\s*(\d+)/)?.[1] || 0), parseInt(body.match(/برونزي:\s*(\d+)/)?.[1] || 0), parseInt(pMatch[1]), statusMatch[1]);
+        handleBoxFarming(
+            parseInt(gMatch[1]), 
+            parseInt(body.match(/فضي:\s*(\d+)/)?.[1] || 0), 
+            parseInt(body.match(/برونزي:\s*(\d+)/)?.[1] || 0), 
+            parseInt(pMatch[1]), 
+            statusMatch[1]
+        );
     }
 
     // معالجة الزمن
     if (timeMatch) {
-        const timeStatus = timeMatch[1].trim(); // هذا النص هو فقط ما بعد "الجهاز الزمني:"
-        let isReady = statusMatch ? statusMatch[1].includes('جاهز') : false;
+        const timeStatus = timeMatch[1].trim(); 
+        const isReady = statusMatch ? statusMatch[1].includes('جاهز') : false;
+        const oldState = isSystemActive;
 
+        // المنطق الدقيق للحالة
         if (timeStatus.includes('غير نشط')) {
             isSystemActive = false;
+            // فقط إذا كان جاهزاً والوضع خامل، اطلب الصندوق
             if (isReady) {
                 await client.messaging.sendGroupMessage(CHANNEL_TASKS, '!مد صندوق ضمان وقت');
                 isSystemActive = true; 
@@ -163,7 +175,11 @@ client.on('groupMessage', async (message) => {
         } else if (timeStatus.includes('س') || timeStatus.includes('د')) {
             isSystemActive = true; 
         }
-        manageTimer();
+
+        // لا تقم بإعادة ضبط المؤقت إلا إذا تغيرت الحالة فعلياً
+        if (oldState !== isSystemActive) {
+            manageTimer();
+        }
     }
 });
 
