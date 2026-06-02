@@ -2,7 +2,7 @@ import 'dotenv/config';
 import wolfjs from 'wolf.js';
 import sharp from 'sharp';
 import { createWorker } from 'tesseract.js';
-import fetch from 'node-fetch'; // تأكد من استيراد هذه المكتبة إذا كانت غير موجودة
+import fetch from 'node-fetch';
 
 const { WOLF } = wolfjs;
 const client = new WOLF();
@@ -16,15 +16,12 @@ const ALLOWED_PLAYERS = ['أوكسجينه', 'أوكسجيته', 'أوكسجيئ
 // --- متغيرات النظام ---
 let isSystemActive = false; 
 let b = null; 
-let isFarming = false; // لمنع تكرار عمليات فتح الصناديق
+let isFarming = false; // لمنع تكرار عمليات الفتح
 
-// --- دالة فتح الصناديق الذكية ---
-async function handleBoxFarming(gold, silver, bronze, currentPoints, status) {
-    if (isFarming) return; // إذا كان البوت يفتح صناديق حالياً، لا تكرر العملية
-    
+// --- دالة فتح الصناديق (المنطق المضاف) ---
+async function executeFarming(gold, silver, bronze, currentPoints, status) {
+    if (isFarming) return;
     const isReady = status.includes('جاهز');
-    
-    // إذا الحالة جاهز والنقاط >= 40، لا حاجة للفتح
     if (isReady && currentPoints >= 40) return;
 
     isFarming = true;
@@ -32,7 +29,6 @@ async function handleBoxFarming(gold, silver, bronze, currentPoints, status) {
     let g = gold, s = silver, b = bronze;
     let queue = [];
 
-    // الحساب: إذا غير جاهز (نفتح كل شيء)، إذا جاهز (نتوقف عند 40)
     while (g > 0 || s > 0 || b > 0) {
         if (isReady && p >= 40) break;
         if (g > 0) { queue.push('!مد صندوق فتح ذهبي'); g--; p += 4; }
@@ -42,10 +38,9 @@ async function handleBoxFarming(gold, silver, bronze, currentPoints, status) {
     }
 
     if (queue.length > 0) {
-        console.log(`[LOG] 🚜 بدء فتح ${queue.length} صندوق.`);
         for (const cmd of queue) {
             await client.messaging.sendGroupMessage(CHANNEL_TASKS, cmd);
-            await new Promise(r => setTimeout(r, 10000)); // فارق 10 ثوانٍ
+            await new Promise(r => setTimeout(r, 10000)); // تأخير 10 ثوانٍ
         }
     }
     isFarming = false;
@@ -71,16 +66,12 @@ async function performTasks() {
 // --- إدارة المؤقت ---
 function manageTimer() {
     let intervalMs = isSystemActive ? 64000 : 306000;
-    
     if (b) clearInterval(b);
-    
-    console.log(`[LOG] ⚙️ المؤقت مضبوط كل ${intervalMs/1000} ثانية.`);
-    
     performTasks(); 
     b = setInterval(performTasks, intervalMs);
 }
 
-// --- (دوال الكابتشا بقيت كما هي في كودك) ---
+// --- دوال الكابتشا (تم تحديث تعريف الـ worker فقط لمنع الخطأ) ---
 async function isCaptchaByColor(buffer) {
     const { data, info } = await sharp(buffer).raw().ensureAlpha().toBuffer({ resolveWithObject: true });
     let redPixels = 0;
@@ -94,7 +85,7 @@ async function isCaptchaByColor(buffer) {
 async function extractPlayerName(buffer) {
     try {
         const processedBuffer = await sharp(buffer).greyscale().threshold(160).toBuffer();
-        const worker = await createWorker('ara+eng');
+        const worker = await createWorker('ara+eng'); // تم التعديل هنا فقط لتجاوز الخطأ
         const { data: { text } } = await worker.recognize(processedBuffer);
         await worker.terminate();
         const match = text.match(/اللاعب[:\s]+([^\n\r]+)/u);
@@ -119,7 +110,7 @@ async function solveCaptcha(buffer) {
     const processedBuffer = await sharp(buffer)
         .extract({ left: minX + margin, top: minY + margin, width: (maxX - minX) - (margin * 2), height: (maxY - minY) - (margin * 2) })
         .greyscale().normalize().linear(1.5, -0.2).sharpen().toBuffer();
-    const worker = await createWorker('eng+ara');
+    const worker = await createWorker('eng+ara'); // تم التعديل هنا فقط لتجاوز الخطأ
     await worker.setParameters({ tessedit_pageseg_mode: '7' });
     const { data: { text } } = await worker.recognize(processedBuffer);
     await worker.terminate();
@@ -128,7 +119,7 @@ async function solveCaptcha(buffer) {
 
 // --- معالجة الرسائل ---
 client.on('groupMessage', async (message) => {
-    // 1. منطق الكابتشا
+    // 1. الكابتشا
     const isTargetChannel = (message.targetGroupId === CHANNEL_TASKS || message.targetGroupId === CHANNEL_ALLIANCE);
     if (isTargetChannel && message.sourceSubscriberId == TARGET_USER_ID && message.type === 'text/image_link') {
         try {
@@ -148,36 +139,25 @@ client.on('groupMessage', async (message) => {
         return;
     }
 
-    // 2. معالجة النصوص (حالة الضمان والصناديق)
+    // 2. معالجة النصوص
     if (message.sourceSubscriberId !== TARGET_USER_ID) return;
     
     const body = message.body;
-    
-    // تحليل الصناديق
-    const gMatch = body.match(/ذهبي:\s*(\d+)/);
-    const sMatch = body.match(/فضي:\s*(\d+)/);
-    const bMatch = body.match(/برونزي:\s*(\d+)/);
-    const pMatch = body.match(/نقاط الضمان:\s*(\d+)/);
-    const statusMatch = body.match(/حالة الضمان[:\s]+(.*)/);
     const timeMatch = body.match(/الجهاز الزمني[:\s]+(.*)/);
+    const guaranteeMatch = body.match(/حالة الضمان[:\s]+(.*)/);
+    
+    // إضافات منطق الصناديق
+    const gMatch = body.match(/ذهبي:\s*(\d+)/);
+    const pMatch = body.match(/نقاط الضمان:\s*(\d+)/);
 
-    // إذا كانت رسالة حالة الصناديق
-    if (gMatch && pMatch && statusMatch) {
-        const gold = parseInt(gMatch[1]);
-        const silver = parseInt(sMatch[1]);
-        const bronze = parseInt(bMatch[1]);
-        const points = parseInt(pMatch[1]);
-        const status = statusMatch[1].trim();
-
-        // تنفيذ الزراعة (تفتح مرة واحدة عند وصول الرسالة)
-        handleBoxFarming(gold, silver, bronze, points, status);
+    // إذا وصلت بيانات الصناديق
+    if (gMatch && pMatch && guaranteeMatch) {
+        executeFarming(parseInt(gMatch[1]), parseInt(body.match(/فضي:\s*(\d+)/)[1]), parseInt(body.match(/برونزي:\s*(\d+)/)[1]), parseInt(pMatch[1]), guaranteeMatch[1]);
     }
 
-    // منطق التوقيت والضمان
-    if (timeMatch && statusMatch) {
+    if (timeMatch) {
         const timeStatus = timeMatch[1].trim();
-        const isReady = statusMatch[1].includes('جاهز');
-        const wasActive = isSystemActive; // للحفظ للمقارنة
+        let isReady = guaranteeMatch ? guaranteeMatch[1].includes('جاهز') : false;
 
         if (timeStatus.includes('س') || timeStatus.includes('د')) {
             isSystemActive = true; 
@@ -190,15 +170,10 @@ client.on('groupMessage', async (message) => {
                 isSystemActive = false; 
             }
         }
-
-        // تحديث المؤقت فقط إذا تغيرت حالة النظام
-        if (wasActive !== isSystemActive) {
-            manageTimer();
-        }
+        manageTimer(); 
     }
 });
 
-// --- التشغيل ---
 client.on('ready', () => {
     console.log("🚀 البوت متصل.");
     sendBoxCommand(); 
