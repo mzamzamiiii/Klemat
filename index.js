@@ -15,7 +15,7 @@ const ALLOWED_PLAYERS = ['أوكسجينه', 'أوكسجيته', 'أوكسجيئ
 // متغير عام لتخزين التايمر
 let globalTimer = 0;
 
-// --- الدوال الأساسية (كما هي) ---
+// --- الدوال الأساسية للكابتشا (كما هي) ---
 async function isCaptchaByColor(buffer) {
     const { data, info } = await sharp(buffer).raw().ensureAlpha().toBuffer({ resolveWithObject: true });
     let redPixels = 0;
@@ -80,7 +80,7 @@ client.on('groupMessage', async (message) => {
     } catch (err) { console.error("⚠️ خطأ في الكابتشا:", err.message); }
 });
 
-// --- حلقة فحص الصناديق (كل 30 دقيقة) ---
+// --- وظيفة فحص الصناديق ---
 const sendBoxCommand = async () => {
     try {
         await client.messaging.sendGroupMessage(CHANNEL_ID, '!مد صندوق');
@@ -96,7 +96,7 @@ const sendBoxCommand = async () => {
                 if (b.includes("غير نشط")) {
                     if (!a.includes("غير جاهز")) {
                         await client.messaging.sendGroupMessage(CHANNEL_ID, '!مد صندوق ضمان وقت');
-                        tempTimer = 3 * 60 * 60;
+                        tempTimer = 3 * 60 * 60; // 3 ساعات
                     }
                 } else {
                     const h = b.match(/(\d+)س/);
@@ -117,29 +117,45 @@ const sendBoxCommand = async () => {
     } catch (err) { console.error("⚠️ خطأ في أمر الصندوق:", err.message); }
 };
 
-// --- حلقة الأوامر المتكررة ---
+// --- حلقة المهام (مع تحديث التايمر) ---
 const startTaskLoop = async () => {
     while (true) {
-        await client.messaging.sendGroupMessage(CHANNEL_ID, '!مد مهام');
-        await new Promise(resolve => setTimeout(resolve, 2000)); // انتظار ثانيتين
-        await client.messaging.sendGroupMessage(CHANNEL_ID, '!مد تحالف ايداع كل');
+        try {
+            await client.messaging.sendGroupMessage(CHANNEL_ID, '!مد مهام');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await client.messaging.sendGroupMessage(CHANNEL_ID, '!مد تحالف ايداع كل');
 
-        // تحديد وقت الانتظار بناءً على التايمر
-        let x = (globalTimer === 0) ? 306000 : 64000;
-        console.log(`⏳ انتظار لمدة ${x/1000} ثانية. التايمر الحالي: ${globalTimer}`);
-        
-        await new Promise(resolve => setTimeout(resolve, x));
+            if (globalTimer > 0) {
+                // تقليل التايمر
+                globalTimer = Math.max(0, globalTimer - 64);
+                console.log(`⏳ التايمر يقل: ${globalTimer} ثانية متبقية.`);
+                
+                await new Promise(resolve => setTimeout(resolve, 64000));
+            } else {
+                console.log("⏳ التايمر 0، انتظار 306 ثانية.");
+                await new Promise(resolve => setTimeout(resolve, 306000));
+            }
+
+            // تحديث التايمر من الخادم دائماً بعد انتهاء دورة المهام
+            await sendBoxCommand();
+            
+        } catch (err) {
+            console.error("⚠️ خطأ في حلقة الأوامر:", err.message);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+        }
     }
 };
 
 client.on('ready', () => {
     console.log("🚀 البوت يعمل الآن");
     
-    // 1. تنفيذ فحص الصناديق فوراً ثم كل 30 دقيقة
+    // 1. تنفيذ فحص الصناديق أول مرة عند التشغيل
     sendBoxCommand();
+    
+    // 2. تكرار فحص الصناديق كل 30 دقيقة (مستقل)
     setInterval(sendBoxCommand, 30 * 60 * 1000);
 
-    // 2. بدء حلقة الأوامر
+    // 3. بدء حلقة المهام
     startTaskLoop();
 });
 
