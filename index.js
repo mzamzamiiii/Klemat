@@ -106,7 +106,17 @@ client.on('ready', () => {
             // مستمع مؤقت للرد
             const responseHandler = (message) => {
                 if (message.targetGroupId == CHANNEL_ID && message.body.startsWith('/me 📦 حالة الصناديق')) {
-                    console.log("✅ تم استلام حالة الصناديق بنجاح.");
+                    
+                    // استخراج النصوص المطلوبة
+                    const matchA = message.body.match(/حالة الضمان:\s*(.*)/);
+                    const matchB = message.body.match(/الجهاز الزمني:\s*(.*)/);
+
+                    const a = matchA ? matchA[1].trim() : "غير موجود";
+                    const b = matchB ? matchB[1].trim() : "غير موجود";
+
+                    console.log("قيمة a:", a);
+                    console.log("قيمة b:", b);
+
                     client.removeListener('groupMessage', responseHandler);
                 }
             };
@@ -131,4 +141,3 @@ client.on('ready', () => {
 });
 
 client.login(process.env.U_MAIL, process.env.U_PASS);
-
