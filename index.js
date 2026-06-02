@@ -8,7 +8,7 @@ const { WOLF } = wolfjs;
 const client = new WOLF();
 
 // --- الإعدادات ---
-const TARGET_USER_ID = 80055399 ;
+const TARGET_USER_ID = 729373 ;
 const CHANNEL_ID = 81889058; // تأكد من وضع رقم القناة هنا
 const ALLOWED_PLAYERS = ['أوكسجينه', 'أوكسجيته', 'أوكسجيئه'];
 
