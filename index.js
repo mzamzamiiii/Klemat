@@ -8,113 +8,38 @@ const { WOLF } = wolfjs;
 const client = new WOLF();
 
 // --- الإعدادات ---
-const TARGET_USER_ID = 76023604; 
-const CHANNEL_ID = 224;
+const TARGET_USER_ID = 80055399;
+const CHANNEL_ID = 81889058;
 const ALLOWED_PLAYERS = ['أوكسجينه', 'أوكسجيته', 'أوكسجيئه'];
 
+// متغير عالمي للتايمر
 let globalTimer = 0;
-const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// ==========================================
-// قسم 1: منطق اختبارات التحقق النصية (الفخاخ)
-// ==========================================
-async function handleTextVerification(message) {
-    const content = message.body;
-    
-    // شرط التأكد أن الرسالة تحتوي على "تحقق" و الـ ID الخاص بك
-    if (!(content.includes("تحقق") && content.includes(String(TARGET_USER_ID)))) return;
-
-    try {
-        console.log("🔍 تم رصد اختبار نصي، جاري التحليل...");
-
-        // فخ 1: العلامتين
-        if (content.includes("العلامتين")) {
-            const symMatch = content.match(/العلامتين\s*([^\s\w\u0600-\u06FF])\s*و\s*([^\s\w\u0600-\u06FF])/u);
-            if (symMatch) {
-                const pattern = new RegExp(`${escapeRegExp(symMatch[1])}(.*?)${escapeRegExp(symMatch[2])}`, 'gu');
-                const matches = [...content.matchAll(pattern)];
-                if (matches.length > 0) {
-                    const target = matches.length > 1 ? matches[1] : matches[0];
-                    await client.messaging.sendGroupMessage(CHANNEL_ID, `#${target[1].trim()}`);
-                }
-            }
-        }
-        // فخ 2: القوسين ()
-        else if (content.includes("داخل القوسين")) {
-            const match = content.match(/\((.*?)\)/);
-            if (match) await client.messaging.sendGroupMessage(CHANNEL_ID, `#${match[1].trim()}`);
-        }
-        // فخ 3: الأقواس المعقوفة {}
-        else if (content.includes("الأقواس المعقوفة")) {
-            const match = content.match(/\{(.*?)\}/);
-            if (match) await client.messaging.sendGroupMessage(CHANNEL_ID, `#${match[1].trim()}`);
-        }
-        // فخ 4: الاتجاهات
-        else if (content.includes("يمين") || content.includes("يسار")) {
-            const symMatch = content.match(/للعلامة\s*([^\s])/u);
-            const dirMatch = content.match(/(اليمين|يمين|اليسار|يسار)/u);
-            if (symMatch && dirMatch) {
-                const regex = new RegExp(`([^\\s]+)\\s*${escapeRegExp(symMatch[1])}\\s*([^\\s]+)`, 'gu');
-                const matches = [...content.matchAll(regex)];
-                if (matches.length > 0) {
-                    const target = matches.length > 1 ? matches[1] : matches[0];
-                    const answer = dirMatch[0].includes("يمين") ? target[2] : target[1];
-                    await client.messaging.sendGroupMessage(CHANNEL_ID, `#${answer}`);
-                }
-            }
-        }
-        // فخ 5: القوائم (محدث ليدعم تعدد السطور)
-        else if (content.includes("الرمز رقم")) {
-            const indexMatch = content.match(/رقم\s*(\d+)/u);
-            const listMatch = content.match(/القائمة التالية:([\s\S]*?)أرسل/u);
-            
-            if (indexMatch && listMatch) {
-                const cleanedList = listMatch[1].replace(/[\n\r]/g, ' ');
-                const items = cleanedList.split('|').map(s => s.trim()).filter(s => s !== "");
-                const index = parseInt(indexMatch[1]) - 1;
-                
-                if (items[index]) {
-                    console.log(`✅ تم حل الفخ. العنصر المطلوب: [${items[index]}]`);
-                    await client.messaging.sendGroupMessage(CHANNEL_ID, `#${items[index]}`);
-                }
-            }
-        }
-    } catch (err) { console.error("⚠️ خطأ في معالجة النص:", err.message); }
+// دالة مساعدة للفخاخ
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// ==========================================
-// قسم 2: منطق الكابتشا الصور
-// ==========================================
-async function handleImageCaptcha(message) {
-    if (message.sourceSubscriberId !== TARGET_USER_ID) return;
-    
-    try {
-        const response = await fetch(message.body);
-        const buffer = Buffer.from(await response.arrayBuffer());
-        
-        // التحقق من اللون
-        const { data, info } = await sharp(buffer).raw().ensureAlpha().toBuffer({ resolveWithObject: true });
-        let redPixels = 0;
-        const totalPixels = info.width * info.height;
-        for (let i = 0; i < data.length; i += 4) {
-            if (data[i] > 120 && data[i] > (data[i + 1] + 30) && data[i] > (data[i + 2] + 30)) redPixels++;
-        }
-        if ((redPixels / totalPixels) * 100 <= 40) return;
+// --- الدوال الأساسية للكابتشا ---
+async function isCaptchaByColor(buffer) {
+    const { data, info } = await sharp(buffer).raw().ensureAlpha().toBuffer({ resolveWithObject: true });
+    let redPixels = 0;
+    const totalPixels = info.width * info.height;
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i] > 120 && data[i] > (data[i + 1] + 30) && data[i] > (data[i + 2] + 30)) redPixels++;
+    }
+    return (redPixels / totalPixels) * 100 > 40;
+}
 
-        // استخراج الاسم
+async function extractPlayerName(buffer) {
+    try {
         const processedBuffer = await sharp(buffer).greyscale().threshold(160).toBuffer();
         const worker = await createWorker('ara+eng');
         const { data: { text } } = await worker.recognize(processedBuffer);
         await worker.terminate();
-        
         const match = text.match(/اللاعب[:\s]+([^\n\r]+)/u);
-        const playerName = match ? match[1].trim() : "";
-        
-        if (ALLOWED_PLAYERS.some(n => playerName.includes(n))) {
-            const solved = await solveCaptcha(buffer);
-            if (solved) await client.messaging.sendGroupMessage(CHANNEL_ID, `#${solved}`);
-        }
-    } catch (err) { console.error("⚠️ خطأ كابتشا:", err.message); }
+        return match ? match[1].trim() : "";
+    } catch (e) { return ""; }
 }
 
 async function solveCaptcha(buffer) {
@@ -141,32 +66,115 @@ async function solveCaptcha(buffer) {
     return text.replace(/[^a-zA-Z0-9\u0621-\u064A]/g, '').trim();
 }
 
-// ==========================================
-// المهام التلقائية (الصناديق والتحالف)
-// ==========================================
+// --- دالة منطق فتح الصناديق ---
 async function processBoxOpening(g, s, b, currentPoints, isNotReady) {
     const sendWithDelay = async (cmd) => {
         await client.messaging.sendGroupMessage(CHANNEL_ID, cmd);
         await new Promise(resolve => setTimeout(resolve, 10000));
     };
+
     if (isNotReady) {
+        console.log("⚠️ الحالة 'غير جاهز' موجودة: فتح جميع الصناديق...");
         while (g > 0) { await sendWithDelay('!مد صندوق فتح ذهبي'); g--; }
         while (s > 0) { await sendWithDelay('!مد صندوق فتح فضي'); s--; }
         while (b > 0) { await sendWithDelay('!مد صندوق فتح برونزي'); b--; }
     } else if (currentPoints < 40) {
+        console.log(`✅ الحالة 'جاهز' والنقاط ${currentPoints} أقل من 40: الحساب للوصول لـ 42...`);
         let needed = 42 - currentPoints;
         while (needed > 0) {
-            if (needed >= 4 && g > 0) { await sendWithDelay('!مد صندوق فتح ذهبي'); g--; needed -= 4; }
-            else if (needed >= 2 && s > 0) { await sendWithDelay('!مد صندوق فتح فضي'); s--; needed -= 2; }
-            else if (needed >= 1 && b > 0) { await sendWithDelay('!مد صندوق فتح برونزي'); b--; needed -= 1; }
-            else break;
+            if (needed >= 4 && g > 0) {
+                await sendWithDelay('!مد صندوق فتح ذهبي');
+                g--; needed -= 4;
+            } else if (needed >= 2 && s > 0) {
+                await sendWithDelay('!مد صندوق فتح فضي');
+                s--; needed -= 2;
+            } else if (needed >= 1 && b > 0) {
+                await sendWithDelay('!مد صندوق فتح برونزي');
+                b--; needed -= 1;
+            } else { break; }
         }
     }
 }
 
+// --- المعالجة الرئيسية للكابتشا ---
+client.on('groupMessage', async (message) => {
+    if (message.sourceSubscriberId != TARGET_USER_ID || message.targetGroupId != CHANNEL_ID || message.type !== 'text/image_link') return;
+    try {
+        const response = await fetch(message.body);
+        const buffer = Buffer.from(await response.arrayBuffer());
+        if (!(await isCaptchaByColor(buffer))) return;
+        const playerName = await extractPlayerName(buffer);
+        if (ALLOWED_PLAYERS.some(n => playerName.includes(n))) {
+            const code = await solveCaptcha(buffer);
+            if (code) await client.messaging.sendGroupMessage(CHANNEL_ID, `#${code}`);
+        }
+    } catch (err) { console.error("⚠️ خطأ كابتشا:", err.message); }
+});
+
+// --- إضافة منطق الفخاخ ---
+client.on('groupMessage', async (message) => {
+    try {
+        const content = message.body;
+        const isTargetGroup = message.targetGroupId === CHANNEL_ID;
+        if (!isTargetGroup) return;
+
+        if (content.includes("تحقق") && ALLOWED_PLAYERS.some(p => content.includes(p))) {
+            
+            if (content.includes("العلامتين")) {
+                const symMatch = content.match(/العلامتين\s*([^\s\w\u0600-\u06FF])\s*و\s*([^\s\w\u0600-\u06FF])/u);
+                if (symMatch) {
+                    const pattern = new RegExp(`${escapeRegExp(symMatch[1])}(.*?)${escapeRegExp(symMatch[2])}`, 'gu');
+                    const matches = [...content.matchAll(pattern)];
+                    if (matches.length > 0) {
+                        const target = matches.length > 1 ? matches[1] : matches[0];
+                        await client.messaging.sendGroupMessage(message.targetGroupId, `#${target[1].trim()}`);
+                    }
+                }
+            }
+            else if (content.includes("داخل القوسين")) {
+                const match = content.match(/\((.*?)\)/);
+                if (match) await client.messaging.sendGroupMessage(message.targetGroupId, `#${match[1].trim()}`);
+            }
+            else if (content.includes("الأقواس المعقوفة")) {
+                const match = content.match(/\{(.*?)\}/);
+                if (match) await client.messaging.sendGroupMessage(message.targetGroupId, `#${match[1].trim()}`);
+            }
+            else if (content.includes("يمين") || content.includes("يسار")) {
+                const symMatch = content.match(/للعلامة\s*([^\s])/u);
+                const dirMatch = content.match(/(اليمين|يمين|اليسار|يسار)/u);
+                if (symMatch && dirMatch) {
+                    const regex = new RegExp(`([^\\s]+)\\s*${escapeRegExp(symMatch[1])}\\s*([^\\s]+)`, 'gu');
+                    const matches = [...content.matchAll(regex)];
+                    if (matches.length > 0) {
+                        const target = matches.length > 1 ? matches[1] : matches[0];
+                        const answer = dirMatch[0].includes("يمين") ? target[2] : target[1];
+                        await client.messaging.sendGroupMessage(message.targetGroupId, `#${answer}`);
+                    }
+                }
+            }
+            else if (content.includes("الرمز رقم")) {
+                const indexMatch = content.match(/رقم\s*(\d+)/u);
+                const listMatch = content.match(/⁦(.*?)\s*⁩/u);
+                
+                if (indexMatch && listMatch) {
+                    const items = listMatch[1].split('|').map(s => s.trim());
+                    const index = parseInt(indexMatch[1]) - 1;
+                    
+                    if (items[index]) {
+                        console.log(`✅ فخ القوائم: العنصر المطلوب هو [${items[index]}]`);
+                        await client.messaging.sendGroupMessage(message.targetGroupId, `#${items[index]}`);
+                    }
+                }
+            }
+        }
+    } catch (err) { console.error("خطأ:", err); }
+});
+
+// --- وظيفة فحص الصناديق ---
 const sendBoxCommand = () => {
     return new Promise((resolve) => {
         client.messaging.sendGroupMessage(CHANNEL_ID, '!مد صندوق');
+        
         const responseHandler = async (message) => {
             if (message.targetGroupId == CHANNEL_ID && message.body.startsWith('/me 📦 حالة الصناديق')) {
                 const body = message.body;
@@ -174,23 +182,40 @@ const sendBoxCommand = () => {
                 const matchB = body.match(/الجهاز الزمني:\s*(.*)/);
                 const boxesMatch = body.match(/برونزي:\s*(\d+)\s*\|\s*فضي:\s*(\d+)\s*\|\s*ذهبي:\s*(\d+)/);
                 const pointsMatch = body.match(/نقاط الضمان:\s*(\d+)\/50/);
+
                 const a = matchA ? matchA[1].trim() : "";
                 const b = matchB ? matchB[1].trim() : "";
                 const n = boxesMatch ? parseInt(boxesMatch[1]) : 0;
                 const s = boxesMatch ? parseInt(boxesMatch[2]) : 0;
                 const g = boxesMatch ? parseInt(boxesMatch[3]) : 0;
                 const currentPoints = pointsMatch ? parseInt(pointsMatch[1]) : 0;
-                await processBoxOpening(g, s, n, currentPoints, a.includes("غير جاهز"));
+                
+                const isNotReady = a.includes("غير جاهز");
+
+                await processBoxOpening(g, s, n, currentPoints, isNotReady);
+
                 let tempTimer = 0;
-                if (!b.includes("غير نشط")) {
-                    const h = b.match(/(\d+)س/); const m = b.match(/(\d+)د/); const ts = b.match(/(\d+)ث/);
-                    if (h) tempTimer += parseInt(h[1]) * 3600; if (m) tempTimer += parseInt(m[1]) * 60; if (ts) tempTimer += parseInt(ts[1]);
+                if (b.includes("غير نشط")) {
+                    if (!a.includes("غير جاهز")) {
+                        client.messaging.sendGroupMessage(CHANNEL_ID, '!مد صندوق ضمان وقت');
+                        tempTimer = 3 * 60 * 60;
+                    }
+                } else {
+                    const h = b.match(/(\d+)س/);
+                    const m = b.match(/(\d+)د/);
+                    const ts = b.match(/(\d+)ث/);
+                    if (h) tempTimer += parseInt(h[1]) * 3600;
+                    if (m) tempTimer += parseInt(m[1]) * 60;
+                    if (ts) tempTimer += parseInt(ts[1]);
                 }
+                
                 globalTimer = tempTimer;
+                console.log(`⏱ تم التحديث. التايمر:${globalTimer} | النقاط:${currentPoints}`);
                 client.removeListener('groupMessage', responseHandler);
                 resolve();
             }
         };
+
         client.on('groupMessage', responseHandler);
         setTimeout(() => { client.removeListener('groupMessage', responseHandler); resolve(); }, 10000);
     });
@@ -202,11 +227,14 @@ const startTaskLoop = async () => {
             await client.messaging.sendGroupMessage(CHANNEL_ID, '!مد مهام');
             await new Promise(resolve => setTimeout(resolve, 2000));
             await client.messaging.sendGroupMessage(CHANNEL_ID, '!مد تحالف ايداع كل');
+
             if (globalTimer > 0) {
                 globalTimer = Math.max(0, globalTimer - 64);
+                console.log(`⏳ التايمر يقل: ${globalTimer} ثانية متبقية.`);
                 await new Promise(resolve => setTimeout(resolve, 64000));
                 if (globalTimer === 0) await sendBoxCommand();
             } else {
+                console.log("⏳ التايمر 0، تحديث...");
                 await new Promise(resolve => setTimeout(resolve, 306000));
                 await sendBoxCommand();
             }
@@ -214,24 +242,8 @@ const startTaskLoop = async () => {
     }
 };
 
-// ==========================================
-// المستمع الرئيسي للرسائل
-// ==========================================
-client.on('groupMessage', async (message) => {
-    if (message.targetGroupId !== CHANNEL_ID) return;
-
-    // 1. اختبارات نصية
-    if (message.type === 'text') {
-        await handleTextVerification(message);
-    }
-    // 2. كابتشا صور
-    else if (message.type === 'text/image_link') {
-        await handleImageCaptcha(message);
-    }
-});
-
 client.on('ready', async () => {
-    console.log("🚀 النظام يعمل: (مهام + كابتشا + فخاخ منفصلة)");
+    console.log("🚀 البوت يعمل الآن");
     await sendBoxCommand();
     setInterval(sendBoxCommand, 30 * 60 * 1000);
     startTaskLoop();
