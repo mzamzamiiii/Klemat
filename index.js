@@ -8,7 +8,7 @@ const { WOLF } = wolfjs;
 const client = new WOLF();
 
 // --- الإعدادات ---
-const TARGET_USER_ID = 76023604;
+const TARGET_USER_ID = 76023604 ;
 const CHANNEL_ID = 224;
 const ALLOWED_PLAYERS = ['أوكسجينه', 'أوكسجيته', 'أوكسجيئه'];
 
@@ -70,7 +70,7 @@ async function solveCaptcha(buffer) {
 async function processBoxOpening(g, s, b, currentPoints, isNotReady) {
     const sendWithDelay = async (cmd) => {
         await client.messaging.sendGroupMessage(CHANNEL_ID, cmd);
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        await new Promise(resolve => setTimeout(resolve, 10000)); // انتظار 10 ثواني
     };
 
     if (isNotReady) {
@@ -106,7 +106,7 @@ client.on('groupMessage', async (message) => {
         const playerName = await extractPlayerName(buffer);
         if (ALLOWED_PLAYERS.some(n => playerName.includes(n))) {
             const code = await solveCaptcha(buffer);
-            if (code) await client.messaging.sendGroupMessage(CHANNEL_ID, "\u200E#" + code);
+            if (code) await client.messaging.sendGroupMessage(CHANNEL_ID, `\u200E#${code}`);
         }
     } catch (err) { console.error("⚠️ خطأ كابتشا:", err.message); }
 });
@@ -127,17 +127,17 @@ client.on('groupMessage', async (message) => {
                     const matches = [...content.matchAll(pattern)];
                     if (matches.length > 0) {
                         const target = matches.length > 1 ? matches[1] : matches[0];
-                        await client.messaging.sendGroupMessage(message.targetGroupId, "\u200E#" + target[1].trim());
+                        await client.messaging.sendGroupMessage(message.targetGroupId, `\u200E#${target[1].trim()}`);
                     }
                 }
             }
             else if (content.includes("داخل القوسين")) {
                 const match = content.match(/\((.*?)\)/);
-                if (match) await client.messaging.sendGroupMessage(message.targetGroupId, "\u200E#" + match[1].trim());
+                if (match) await client.messaging.sendGroupMessage(message.targetGroupId, `\u200E#${match[1].trim()}`);
             }
             else if (content.includes("الأقواس المعقوفة")) {
                 const match = content.match(/\{(.*?)\}/);
-                if (match) await client.messaging.sendGroupMessage(message.targetGroupId, "\u200E#" + match[1].trim());
+                if (match) await client.messaging.sendGroupMessage(message.targetGroupId, `\u200E#${match[1].trim()}`);
             }
             else if (content.includes("يمين") || content.includes("يسار")) {
                 const symMatch = content.match(/للعلامة\s*([^\s])/u);
@@ -148,21 +148,21 @@ client.on('groupMessage', async (message) => {
                     if (matches.length > 0) {
                         const target = matches.length > 1 ? matches[1] : matches[0];
                         const answer = dirMatch[0].includes("يمين") ? target[2] : target[1];
-                        await client.messaging.sendGroupMessage(message.targetGroupId, "\u200E#" + answer);
+                        await client.messaging.sendGroupMessage(message.targetGroupId, `\u200E#${answer}`);
                     }
                 }
             }
             else if (content.includes("الرمز رقم")) {
                 const indexMatch = content.match(/رقم\s*(\d+)/u);
-                const listMatch = content.match(/⁦(.*?)\s*⁩/u);
+                const listMatch = content.match(/⁦(.*?)\s*⁩/u); // التقاط النص بين العلامات الخاصة
                 
                 if (indexMatch && listMatch) {
                     const items = listMatch[1].split('|').map(s => s.trim());
-                    const index = parseInt(indexMatch[1]) - 1;
+                    const index = parseInt(indexMatch[1]) - 1; // تحويل من 1-based إلى 0-based
                     
                     if (items[index]) {
                         console.log(`✅ فخ القوائم: العنصر المطلوب هو [${items[index]}]`);
-                        await client.messaging.sendGroupMessage(message.targetGroupId, "\u200E#" + items[index]);
+                        await client.messaging.sendGroupMessage(message.targetGroupId, `\u200E#${items[index]}`);
                     }
                 }
             }
@@ -177,6 +177,7 @@ const sendBoxCommand = () => {
         
         const responseHandler = async (message) => {
             if (message.targetGroupId == CHANNEL_ID && message.body.startsWith('/me 📦 حالة الصناديق')) {
+                // 1. استخراج المتغيرات
                 const body = message.body;
                 const matchA = body.match(/حالة الضمان:\s*(.*)/);
                 const matchB = body.match(/الجهاز الزمني:\s*(.*)/);
@@ -185,15 +186,17 @@ const sendBoxCommand = () => {
 
                 const a = matchA ? matchA[1].trim() : "";
                 const b = matchB ? matchB[1].trim() : "";
-                const n = boxesMatch ? parseInt(boxesMatch[1]) : 0;
-                const s = boxesMatch ? parseInt(boxesMatch[2]) : 0;
-                const g = boxesMatch ? parseInt(boxesMatch[3]) : 0;
+                const n = boxesMatch ? parseInt(boxesMatch[1]) : 0; // برونزي
+                const s = boxesMatch ? parseInt(boxesMatch[2]) : 0; // فضي
+                const g = boxesMatch ? parseInt(boxesMatch[3]) : 0; // ذهبي
                 const currentPoints = pointsMatch ? parseInt(pointsMatch[1]) : 0;
                 
                 const isNotReady = a.includes("غير جاهز");
 
+                // 2. تنفيذ منطق الفتح قبل أي شيء
                 await processBoxOpening(g, s, n, currentPoints, isNotReady);
 
+                // 3. حساب التايمر
                 let tempTimer = 0;
                 if (b.includes("غير نشط")) {
                     if (!a.includes("غير جاهز")) {
