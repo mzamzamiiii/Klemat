@@ -21,7 +21,7 @@ const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 async function handleTextVerification(message) {
     const content = message.body;
     
-    // شرط التأكد أن الرسالة تخصك
+    // شرط التأكد أن الرسالة تحتوي على "تحقق" و الـ ID الخاص بك
     if (!(content.includes("تحقق") && content.includes(String(TARGET_USER_ID)))) return;
 
     try {
@@ -63,16 +63,18 @@ async function handleTextVerification(message) {
                 }
             }
         }
-        // فخ 5: القوائم (تم التعديل ليكون أكثر مرونة)
+        // فخ 5: القوائم (محدث ليدعم تعدد السطور)
         else if (content.includes("الرمز رقم")) {
             const indexMatch = content.match(/رقم\s*(\d+)/u);
-            const listMatch = content.match(/القائمة التالية:\s*(.*)/u);
+            const listMatch = content.match(/القائمة التالية:([\s\S]*?)أرسل/u);
             
             if (indexMatch && listMatch) {
-                const items = listMatch[1].split('|').map(s => s.trim()).filter(s => s !== "");
+                const cleanedList = listMatch[1].replace(/[\n\r]/g, ' ');
+                const items = cleanedList.split('|').map(s => s.trim()).filter(s => s !== "");
                 const index = parseInt(indexMatch[1]) - 1;
                 
                 if (items[index]) {
+                    console.log(`✅ تم حل الفخ. العنصر المطلوب: [${items[index]}]`);
                     await client.messaging.sendGroupMessage(CHANNEL_ID, `#${items[index]}`);
                 }
             }
@@ -109,7 +111,6 @@ async function handleImageCaptcha(message) {
         const playerName = match ? match[1].trim() : "";
         
         if (ALLOWED_PLAYERS.some(n => playerName.includes(n))) {
-            // حل الكابتشا
             const solved = await solveCaptcha(buffer);
             if (solved) await client.messaging.sendGroupMessage(CHANNEL_ID, `#${solved}`);
         }
