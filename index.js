@@ -14,9 +14,9 @@ const ALLOWED_PLAYERS = ['أوكسجينه', 'أوكسجيته', 'أوكسجيئ
 
 let globalTimer = 0;
 
-// دالة التنسيق الصحيحة لضمان وصول الهاشتاج للبوت
+// الدالة الوحيدة للتحكم بالإرسال - تضمن دائماً الهاشتاج في البداية
 function formatAnswer(text) {
-    return "\u200E#" + text.trim();
+    return "#" + text.trim();
 }
 
 function escapeRegExp(string) {
