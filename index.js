@@ -14,6 +14,11 @@ let isProcessing = false;
 let reconnecting = false;
 let isBotReady = false; // مؤشر للتحقق من جاهزية البوت الفعلية
 
+// دالة لتوليد رقم عشوائي بين نطاقين (محاكاة سرعة الكتابة البشرية لتفادي الحظر)
+function getRandomDelay(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 function getMessageText(message) {
   return (
     message.body ||
@@ -55,25 +60,25 @@ function withTimeout(promise, ms) {
 
 async function send(roomId, text) {
   try {
-    // التأكد من أن الاتصال جاهز تماماً قبل الإرسال
     if (!service || !isBotReady) {
       console.log('⏳ تخطي الإرسال لأن البوت ليس جاهزاً بعد');
       return false;
     }
 
-    await sleep(350);
+    // تأخير ديناميكي عشوائي بين 700ms إلى 1200ms لتفادي فخ الحماية (Anti-Spam)
+    const humanDelay = getRandomDelay(700, 1200);
+    await sleep(humanDelay);
 
     const result = await withTimeout(
       service.messaging.sendGroupMessage(roomId, text),
       5000
     );
 
-    console.log('✅ تم إرسالها:', text);
+    console.log(`✅ تم إرسالها بعد تأخير ${humanDelay}ms:`, text);
     return true;
 
   } catch (err) {
     console.log('❌ فشل/تعليق الإرسال:', err.message);
-    // إذا علق الإرسال، قد يكون الاتصال بالإنترنت ضعيفاً، يفضل ترك معالج الأخطاء الرسمي يتصرف
     return false;
   }
 }
@@ -90,8 +95,13 @@ async function processQueue() {
     console.log('الكلمة المستلمة:', item.word);
     console.log('الإجابة المعكوسة:', item.answer);
 
-    await send(item.roomId, item.answer);
-    await sleep(500); // مهلة أمان بين الرسائل لمنع السبام والتعليق
+    const success = await send(item.roomId, item.answer);
+    
+    if (!success) {
+      await sleep(2000); // إذا فشل الإرسال ننتظر قليلاً قبل العنصر التالي
+    } else {
+      await sleep(800); // مهلة أمان إضافية بعد نجاح الإرسال لضمان الترتيب
+    }
   }
 
   isProcessing = false;
@@ -106,7 +116,6 @@ async function restartBot(reason) {
 
   try {
     if (service) {
-      // إغلاق الاتصال القديم تماماً وتنظيف المستمعين منعاً للتراكم في الذاكرة
       service.removeAllListeners();
       await service.logout().catch(() => {}); 
     }
@@ -156,7 +165,7 @@ function startBot() {
   service.on('ready', async () => {
     console.log('✅ الحساب جاهز ومستقر الآن');
     isBotReady = true;
-    reconnecting = false; // يتم إلغاء وضع إعادة الاتصال فقط عند نجاح الجاهزية
+    reconnecting = false; 
 
     await sleep(2000);
     await send(ROOM_ID, '!عكس');
@@ -177,7 +186,6 @@ function startBot() {
     restartBot('close');
   });
 
-  // تسجيل الدخول
   service.login(process.env.U_MAIL_1, process.env.U_PASS_1).catch((err) => {
     console.log('❌ فشل تسجيل الدخول:', err.message);
     reconnecting = false;
