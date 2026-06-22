@@ -54,9 +54,10 @@ service.on('message', async (message) => {
 
     const answer = reverseText(word);
 
-    await service.messaging.sendGroupMessage(ROOM_ID, answer);
+    await service.messaging.sendGroupMessage(roomId, answer);
 
-    console.log('✅ تم الحل');
+    console.log('✅ تم الإرسال');
+    console.log('roomId:', roomId);
     console.log('الكلمة:', word);
     console.log('الإجابة:', answer);
 
