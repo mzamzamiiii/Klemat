@@ -1,36 +1,26 @@
-name: XO Bot Runner
+name: Wolf Words Test
 
 on:
-  push:
-    branches: [ main ]
-  schedule:
-    - cron: '0 */4 * * *'
   workflow_dispatch:
 
-concurrency:
-  group: xobot-group
-  cancel-in-progress: true
-
 jobs:
-  build:
+  run:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install dependencies
-        run: |
-          rm -rf node_modules package-lock.json
-          npm install --no-audit --no-fund
-          
+        run: npm install --no-audit --no-fund
+
       - name: Run Bot
         env:
-          U_MAIL: ${{ secrets.U_MAIL }}
-          U_PASS: ${{ secrets.U_PASS }}
-        run: node index.js
+          U_MAIL_1: ${{ secrets.U_MAIL_1 }}
+          U_PASS_1: ${{ secrets.U_PASS_1 }}
+        run: npm start
