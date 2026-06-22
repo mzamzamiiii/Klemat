@@ -5,8 +5,8 @@ const { WOLF } = wolfjs;
 
 const service = new WOLF();
 
-const ROOM_ID = 123456;        // غيّر رقم الغرفة هنا
-const TARGET_USER_ID = 111111; // غيّر آيدي بوت الكلمات هنا
+const ROOM_ID = 81971125;        // غيّر رقم الغرفة هنا
+const TARGET_USER_ID = 82641759; // غيّر آيدي بوت الكلمات هنا
 
 const START_COMMAND = '!كلمات';
 const FIRST_GUESS = 'سلامة';
