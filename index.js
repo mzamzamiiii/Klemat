@@ -6,10 +6,7 @@ const { WOLF } = wolfjs;
 const ROOM_ID = 18187126;
 const TARGET_USER_ID = 75423789;
 
-const client = new WOLF({
-  identity: process.env.U_MAIL_1,
-  secret: process.env.U_PASS_1
-});
+const client = new WOLF();
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -28,7 +25,7 @@ function reverseText(text) {
 }
 
 client.on('ready', () => {
-  console.log('✅ Bot Connected');
+  console.log('✅ Bot Connected / الحساب دخل');
 });
 
 client.on('message', async (message) => {
@@ -54,8 +51,18 @@ client.on('message', async (message) => {
     console.log('📤 Sent:', reversedText);
 
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('❌ Message Error:', error);
   }
 });
 
-client.connect();
+async function start() {
+  try {
+    console.log('🔐 Login...');
+    await client.login(process.env.U_MAIL_1, process.env.U_PASS_1);
+    console.log('✅ Login Success');
+  } catch (error) {
+    console.error('❌ Login Error:', error);
+  }
+}
+
+start();
