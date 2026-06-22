@@ -13,11 +13,7 @@ let queue = [];
 let isProcessing = false;
 let reconnecting = false;
 let isBotReady = false;
-let lastQuestionTime = Date.now(); // حساب وقت آخر سؤال وصلنا
-
-function getRandomDelay(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
+let lastQuestionTime = Date.now();
 
 function getMessageText(message) {
   return (message.body || message.content || message.text || message.message || '').trim();
@@ -49,19 +45,20 @@ async function send(roomId, text) {
   try {
     if (!service || !isBotReady) return false;
 
-    const humanDelay = getRandomDelay(700, 1200);
-    await sleep(humanDelay);
+    // تم ضبط المهلة على 400ms ثابتة بناءً على طلبك لزيادة السرعة وحصد النقاط
+    const fixedDelay = 400;
+    await sleep(fixedDelay);
 
     await withTimeout(
       service.messaging.sendGroupMessage(roomId, text),
       5000
     );
 
-    console.log(`✅ تم إرسال [ ${text} ] بعد تأخير ${humanDelay}ms`);
+    console.log(`🚀 تم الإرسال السريع [ ${text} ] بعد ${fixedDelay}ms`);
     return true;
 
   } catch (err) {
-    console.log('❌ فشل الإرسال:', err.message);
+    console.log('❌ فشل الإرسال السريع:', err.message);
     return false;
   }
 }
@@ -77,7 +74,7 @@ async function processQueue() {
     console.log('الإجابة المعكوسة:', item.answer);
 
     const success = await send(item.roomId, item.answer);
-    await sleep(success ? 800 : 2000);
+    await sleep(success ? 500 : 2000); // مهلة سريعة بين العناصر في الطابور
   }
 
   isProcessing = false;
@@ -111,7 +108,6 @@ function startBot() {
 
       if (!text || !message.isGroup || roomId !== ROOM_ID) return;
 
-      // تحديث الوقت عند رؤية أي رسالة جديدة تخص اللعبة لضمان أنها تعمل
       if (senderId === TARGET_USER_ID) {
         lastQuestionTime = Date.now(); 
       }
@@ -134,7 +130,7 @@ function startBot() {
   });
 
   service.on('ready', async () => {
-    console.log('✅ الحساب جاهز ومستقر الآن');
+    console.log('✅ الحساب جاهز ومستقر الآن للسرعة القصوى');
     isBotReady = true;
     reconnecting = false; 
     lastQuestionTime = Date.now();
@@ -153,15 +149,14 @@ function startBot() {
   });
 }
 
-// مراقب الذكاء والتخطي التلقائي:
-// إذا مرت 15 ثانية واللعبة معلقة على كلمة خربانة، يرسل !عكس لتوليد كلمة جديدة وتنشيط اللعبة
+// مراقب التنشيط والتخطي التلقائي عند تعليق الأسئلة
 setInterval(async () => {
   if (service && isBotReady && !isProcessing && queue.length === 0) {
     const timeSinceLastQuestion = Date.now() - lastQuestionTime;
     
     if (timeSinceLastQuestion > 15000) { 
-      console.log('⚠️ اللعبة يبدو أنها علقت على كلمة معطوبة. جاري التنشيط التلقائي...');
-      lastQuestionTime = Date.now(); // تصفير العداد مؤقتاً
+      console.log('⚠️ اللعبة معلقة. جاري تنشيط الغرفة بتنزيل سؤال جديد...');
+      lastQuestionTime = Date.now();
       await send(ROOM_ID, '!عكس');
     }
   }
