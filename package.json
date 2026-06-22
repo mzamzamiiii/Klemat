@@ -1,5 +1,5 @@
 {
-  "name": "wolf-bot",
+  "name": "wolf-words-test",
   "version": "1.0.0",
   "type": "module",
   "main": "index.js",
@@ -7,12 +7,7 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "wolf.js": "latest",
     "dotenv": "latest",
-    "jimp": "latest",
-    "pixelmatch": "latest",
-    "pngjs": "latest",
-    "sharp": "latest",
-    "tesseract.js": "latest"
+    "wolf.js": "latest"
   }
 }
