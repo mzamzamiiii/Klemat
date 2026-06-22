@@ -18,10 +18,6 @@ function getMessageText(message) {
   ).trim();
 }
 
-function reverseText(text) {
-  return text.split('').reverse().join('');
-}
-
 function getRoomId(message) {
   return Number(
     message.targetGroupId ||
@@ -33,27 +29,36 @@ function getRoomId(message) {
   );
 }
 
+function extractWord(text) {
+  const match = text.match(/\|-->\s*(.*?)\s*<--\|/);
+  return match ? match[1].trim() : null;
+}
+
+function reverseText(text) {
+  return text.split('').reverse().join('');
+}
+
 service.on('message', async (message) => {
   try {
     const senderId = Number(message.sourceSubscriberId);
     const roomId = getRoomId(message);
     const text = getMessageText(message);
 
-    console.log('--------------------');
-    console.log('senderId:', senderId);
-    console.log('roomId:', roomId);
-    console.log('isGroup:', message.isGroup);
-    console.log('text:', text);
-
     if (!text) return;
     if (!message.isGroup) return;
     if (roomId !== ROOM_ID) return;
     if (senderId !== TARGET_USER_ID) return;
 
-    const reversedText = reverseText(text);
+    const word = extractWord(text);
+    if (!word) return;
 
-    await service.messaging.sendGroupMessage(ROOM_ID, reversedText);
-    console.log('📤 Sent:', reversedText);
+    const answer = reverseText(word);
+
+    await service.messaging.sendGroupMessage(ROOM_ID, answer);
+
+    console.log('✅ تم الحل');
+    console.log('الكلمة:', word);
+    console.log('الإجابة:', answer);
 
   } catch (err) {
     console.log('❌ Message Error:', err.message);
