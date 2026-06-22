@@ -45,7 +45,7 @@ function reverseText(text) {
 
 async function sendFast(roomId, text) {
   const timeout = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Send timeout')), 700)
+    setTimeout(() => reject(new Error('Send timeout')), 1200)
   );
 
   return Promise.race([
@@ -72,14 +72,20 @@ async function processQueue() {
     const item = queue.shift();
 
     try {
+      console.log('🚀 جاري إرسال:', item.answer);
+
       await sendFast(item.roomId, item.answer);
-      console.log('✅ تم الإرسال:', item.answer);
+
+      console.log('✅ تم الإرسال');
+      console.log('الكلمة:', item.word);
+      console.log('الإجابة:', item.answer);
+
     } catch (err) {
       console.log('⚠️ الإرسال علق، سيتم طلب كلمة جديدة');
       await requestNewWord(item.roomId);
     }
 
-    await sleep(120);
+    await sleep(350);
   }
 
   isProcessing = false;
@@ -106,10 +112,6 @@ service.on('message', async (message) => {
       word,
       answer
     });
-
-    console.log('--------------------');
-    console.log('الكلمة:', word);
-    console.log('الإجابة:', answer);
 
     processQueue();
 
