@@ -8,6 +8,11 @@ const TARGET_USER_ID = 75423789;
 
 const service = new WOLF();
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+let queue = [];
+let isProcessing = false;
+
 function getMessageText(message) {
   return (
     message.body ||
@@ -38,6 +43,31 @@ function reverseText(text) {
   return text.split('').reverse().join('');
 }
 
+async function processQueue() {
+  if (isProcessing) return;
+
+  isProcessing = true;
+
+  while (queue.length > 0) {
+    const item = queue.shift();
+
+    try {
+      await service.messaging.sendGroupMessage(item.roomId, item.answer);
+
+      console.log('✅ تم الإرسال');
+      console.log('الكلمة:', item.word);
+      console.log('الإجابة:', item.answer);
+
+      await sleep(700); // تأخير بسيط يمنع تجاهل الرسائل
+
+    } catch (err) {
+      console.log('❌ Send Error:', err.message);
+    }
+  }
+
+  isProcessing = false;
+}
+
 service.on('message', async (message) => {
   try {
     const senderId = Number(message.sourceSubscriberId);
@@ -54,12 +84,13 @@ service.on('message', async (message) => {
 
     const answer = reverseText(word);
 
-    await service.messaging.sendGroupMessage(roomId, answer);
+    queue.push({
+      roomId,
+      word,
+      answer
+    });
 
-    console.log('✅ تم الإرسال');
-    console.log('roomId:', roomId);
-    console.log('الكلمة:', word);
-    console.log('الإجابة:', answer);
+    processQueue();
 
   } catch (err) {
     console.log('❌ Message Error:', err.message);
