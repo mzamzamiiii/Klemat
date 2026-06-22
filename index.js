@@ -12,7 +12,6 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 let queue = [];
 let isProcessing = false;
-let lastText = '';
 
 function getMessageText(message) {
   return (
@@ -44,20 +43,37 @@ function reverseText(text) {
   return [...text].reverse().join('');
 }
 
+// مهلة تمنع الإرسال من التعليق للأبد
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Send timeout')), ms)
+    )
+  ]);
+}
+
 async function send(roomId, text) {
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      await sleep(1500);
-      await service.messaging.sendGroupMessage(roomId, text);
+      await sleep(700);
+
+      const result = await withTimeout(
+        service.messaging.sendGroupMessage(roomId, text),
+        8000
+      );
+
       console.log(`✅ تم إرسالها محاولة ${attempt}:`, text);
+      console.log('SEND RESULT:', result);
       return true;
+
     } catch (err) {
-      console.log(`❌ فشل الإرسال محاولة ${attempt}:`, err.message);
-      await sleep(2000);
+      console.log(`❌ فشل/تعليق الإرسال محاولة ${attempt}:`, err.message);
+      await sleep(1200);
     }
   }
 
-  console.log('❌ فشل الإرسال نهائيًا:', text);
+  console.log('❌ تخطيت الإجابة بسبب فشل الإرسال:', text);
   return false;
 }
 
@@ -66,20 +82,28 @@ async function processQueue() {
 
   isProcessing = true;
 
-  while (queue.length > 0) {
-    const item = queue.shift();
+  try {
+    while (queue.length > 0) {
+      const item = queue.shift();
 
-    console.log('--------------------');
-    console.log('الكلمة:', item.word);
-    console.log('الإجابة:', item.answer);
+      console.log('--------------------');
+      console.log('الكلمة:', item.word);
+      console.log('الإجابة:', item.answer);
 
-    await send(item.roomId, item.answer);
+      await send(item.roomId, item.answer);
 
-    // فاصل بين كل إجابة والثانية
-    await sleep(1200);
+      await sleep(1000);
+    }
+  } catch (err) {
+    console.log('❌ Queue Error:', err.message);
+  } finally {
+    isProcessing = false;
+
+    // لو دخلت رسائل جديدة أثناء المعالجة، يكملها
+    if (queue.length > 0) {
+      processQueue();
+    }
   }
-
-  isProcessing = false;
 }
 
 service.on('message', async (message) => {
@@ -93,10 +117,6 @@ service.on('message', async (message) => {
     if (roomId !== ROOM_ID) return;
     if (senderId !== TARGET_USER_ID) return;
 
-    // منع تكرار نفس رسالة البوت مرتين
-    if (text === lastText) return;
-    lastText = text;
-
     const word = extractWord(text);
     if (!word) return;
 
@@ -108,6 +128,8 @@ service.on('message', async (message) => {
       answer
     });
 
+    console.log('📥 تمت إضافة كلمة للطابور:', word);
+
     processQueue();
 
   } catch (err) {
@@ -118,12 +140,24 @@ service.on('message', async (message) => {
 service.on('ready', async () => {
   console.log('✅ الحساب جاهز');
 
+  setInterval(() => {
+    console.log('💓 البوت شغال:', new Date().toLocaleTimeString());
+  }, 30000);
+
   await sleep(2000);
   await send(ROOM_ID, '!عكس');
 });
 
+service.on('error', (err) => {
+  console.log('❌ SERVICE ERROR:', err.message || err);
+});
+
 service.on('disconnected', () => {
-  console.log('⚠️ تم فصل الاتصال من WOLF');
+  console.log('⚠️ تم فصل الاتصال');
+});
+
+service.on('close', () => {
+  console.log('⚠️ تم إغلاق الاتصال');
 });
 
 service.login(process.env.U_MAIL_1, process.env.U_PASS_1);
