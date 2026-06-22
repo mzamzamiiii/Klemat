@@ -43,6 +43,26 @@ function reverseText(text) {
   return text.split('').reverse().join('');
 }
 
+async function sendFast(roomId, text) {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Send timeout')), 700)
+  );
+
+  return Promise.race([
+    service.messaging.sendGroupMessage(roomId, text),
+    timeout
+  ]);
+}
+
+async function requestNewWord(roomId) {
+  try {
+    await service.messaging.sendGroupMessage(roomId, '!عكس');
+    console.log('📤 Sent: !عكس');
+  } catch (err) {
+    console.log('❌ Request Error:', err.message);
+  }
+}
+
 async function processQueue() {
   if (isProcessing) return;
 
@@ -52,17 +72,14 @@ async function processQueue() {
     const item = queue.shift();
 
     try {
-      await service.messaging.sendGroupMessage(item.roomId, item.answer);
-
-      console.log('✅ تم الإرسال');
-      console.log('الكلمة:', item.word);
-      console.log('الإجابة:', item.answer);
-
-      await sleep(700); // تأخير بسيط يمنع تجاهل الرسائل
-
+      await sendFast(item.roomId, item.answer);
+      console.log('✅ تم الإرسال:', item.answer);
     } catch (err) {
-      console.log('❌ Send Error:', err.message);
+      console.log('⚠️ الإرسال علق، سيتم طلب كلمة جديدة');
+      await requestNewWord(item.roomId);
     }
+
+    await sleep(120);
   }
 
   isProcessing = false;
@@ -90,6 +107,10 @@ service.on('message', async (message) => {
       answer
     });
 
+    console.log('--------------------');
+    console.log('الكلمة:', word);
+    console.log('الإجابة:', answer);
+
     processQueue();
 
   } catch (err) {
@@ -100,10 +121,7 @@ service.on('message', async (message) => {
 service.on('ready', async () => {
   try {
     console.log('✅ الحساب جاهز');
-
-    await service.messaging.sendGroupMessage(ROOM_ID, '!عكس');
-    console.log('📤 Sent: !عكس');
-
+    await requestNewWord(ROOM_ID);
   } catch (err) {
     console.log('❌ Ready Error:', err.message);
   }
