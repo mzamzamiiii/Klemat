@@ -8,8 +8,7 @@ const TARGET_USER_ID = 75423789;
 
 const service = new WOLF();
 
-let roundId = 0;
-let solved = true;
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 function getMessageText(message) {
   return (
@@ -42,7 +41,14 @@ function reverseText(text) {
 }
 
 async function send(roomId, text) {
-  await service.messaging.sendGroupMessage(roomId, text);
+  try {
+    await service.messaging.sendGroupMessage(roomId, text);
+    console.log('✅ تم إرسالها:', text);
+    return true;
+  } catch (err) {
+    console.log('❌ فشل الإرسال:', err.message);
+    return false;
+  }
 }
 
 service.on('message', async (message) => {
@@ -56,23 +62,8 @@ service.on('message', async (message) => {
     if (roomId !== ROOM_ID) return;
     if (senderId !== TARGET_USER_ID) return;
 
-    if (
-      text.includes('مبارك') ||
-      text.includes('أجبت') ||
-      text.includes('حصلت') ||
-      text.includes('نقطة')
-    ) {
-      solved = true;
-      console.log('✅ ظهرت نتيجة');
-      return;
-    }
-
     const word = extractWord(text);
     if (!word) return;
-
-    roundId++;
-    const thisRound = roundId;
-    solved = false;
 
     const answer = reverseText(word);
 
@@ -80,30 +71,10 @@ service.on('message', async (message) => {
     console.log('الكلمة:', word);
     console.log('الإجابة:', answer);
 
+    // تأخير بسيط حتى لا يتجاهل WOLF الرسالة
+    await sleep(250);
+
     await send(roomId, answer);
-    console.log('📤 أرسل الإجابة:', answer);
-
-    setTimeout(async () => {
-      if (!solved && roundId === thisRound) {
-        try {
-          console.log('🔁 إعادة إرسال الإجابة:', answer);
-          await send(roomId, answer);
-        } catch (err) {
-          console.log('❌ خطأ إعادة الإرسال:', err.message);
-        }
-      }
-    }, 600);
-
-    setTimeout(async () => {
-      if (!solved && roundId === thisRound) {
-        try {
-          console.log('⚠️ لم تنحل، طلب كلمة جديدة');
-          await send(roomId, '!عكس');
-        } catch (err) {
-          console.log('❌ خطأ طلب كلمة جديدة:', err.message);
-        }
-      }
-    }, 1300);
 
   } catch (err) {
     console.log('❌ Message Error:', err.message);
@@ -112,6 +83,8 @@ service.on('message', async (message) => {
 
 service.on('ready', async () => {
   console.log('✅ الحساب جاهز');
+
+  await sleep(1000);
   await send(ROOM_ID, '!عكس');
 });
 
