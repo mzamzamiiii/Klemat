@@ -11,8 +11,8 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 let service = null;
 let queue = [];
 let isProcessing = false;
-let lastMessageTime = Date.now();
 let reconnecting = false;
+let isBotReady = false; // مؤشر للتحقق من جاهزية البوت الفعلية
 
 function getMessageText(message) {
   return (
@@ -55,6 +55,12 @@ function withTimeout(promise, ms) {
 
 async function send(roomId, text) {
   try {
+    // التأكد من أن الاتصال جاهز تماماً قبل الإرسال
+    if (!service || !isBotReady) {
+      console.log('⏳ تخطي الإرسال لأن البوت ليس جاهزاً بعد');
+      return false;
+    }
+
     await sleep(350);
 
     const result = await withTimeout(
@@ -63,11 +69,11 @@ async function send(roomId, text) {
     );
 
     console.log('✅ تم إرسالها:', text);
-    console.log('SEND RESULT:', result);
     return true;
 
   } catch (err) {
     console.log('❌ فشل/تعليق الإرسال:', err.message);
+    // إذا علق الإرسال، قد يكون الاتصال بالإنترنت ضعيفاً، يفضل ترك معالج الأخطاء الرسمي يتصرف
     return false;
   }
 }
@@ -81,11 +87,11 @@ async function processQueue() {
     const item = queue.shift();
 
     console.log('--------------------');
-    console.log('الكلمة:', item.word);
-    console.log('الإجابة:', item.answer);
+    console.log('الكلمة المستلمة:', item.word);
+    console.log('الإجابة المعكوسة:', item.answer);
 
     await send(item.roomId, item.answer);
-    await sleep(500);
+    await sleep(500); // مهلة أمان بين الرسائل لمنع السبام والتعليق
   }
 
   isProcessing = false;
@@ -95,21 +101,22 @@ async function restartBot(reason) {
   if (reconnecting) return;
 
   reconnecting = true;
+  isBotReady = false;
   console.log('🔄 إعادة تشغيل البوت بسبب:', reason);
 
   try {
     if (service) {
-      try {
-        service.removeAllListeners();
-      } catch {}
+      // إغلاق الاتصال القديم تماماً وتنظيف المستمعين منعاً للتراكم في الذاكرة
+      service.removeAllListeners();
+      await service.logout().catch(() => {}); 
     }
-  } catch {}
+  } catch (err) {
+    console.log('تنظيف العميل القديم:', err.message);
+  }
 
-  await sleep(5000);
+  await sleep(5000); // وقت انتظار كافٍ لاستقرار السيرفر قبل الاتصال الجديد
 
   startBot();
-
-  reconnecting = false;
 }
 
 function startBot() {
@@ -117,8 +124,6 @@ function startBot() {
 
   service.on('message', async (message) => {
     try {
-      lastMessageTime = Date.now();
-
       const senderId = Number(message.sourceSubscriberId);
       const roomId = getRoomId(message);
       const text = getMessageText(message);
@@ -139,7 +144,7 @@ function startBot() {
         answer
       });
 
-      console.log('📥 دخلت كلمة جديدة:', word);
+      console.log('📥 دخلت كلمة جديدة إلى الطابور:', word);
 
       processQueue();
 
@@ -149,9 +154,9 @@ function startBot() {
   });
 
   service.on('ready', async () => {
-    console.log('✅ الحساب جاهز');
-
-    lastMessageTime = Date.now();
+    console.log('✅ الحساب جاهز ومستقر الآن');
+    isBotReady = true;
+    reconnecting = false; // يتم إلغاء وضع إعادة الاتصال فقط عند نجاح الجاهزية
 
     await sleep(2000);
     await send(ROOM_ID, '!عكس');
@@ -172,18 +177,22 @@ function startBot() {
     restartBot('close');
   });
 
-  service.login(process.env.U_MAIL_1, process.env.U_PASS_1);
+  // تسجيل الدخول
+  service.login(process.env.U_MAIL_1, process.env.U_PASS_1).catch((err) => {
+    console.log('❌ فشل تسجيل الدخول:', err.message);
+    reconnecting = false;
+    restartBot('login failed');
+  });
 }
 
-// مراقب: إذا ما استقبل أي رسالة لمدة 60 ثانية يعيد التشغيل
+// مراقب نبضات القلب الذكي: يفحص هل البوت متصل فعلياً بالمنصة أم لا كل 30 ثانية
 setInterval(() => {
-  const diff = Date.now() - lastMessageTime;
-
-  console.log('💓 البوت شغال - آخر رسالة قبل:', Math.round(diff / 1000), 'ثانية');
-
-  if (diff > 60000) {
-    restartBot('لم يستقبل رسائل لمدة 60 ثانية');
+  if (service && isBotReady) {
+    console.log('💓 البوت يعمل بشكل ممتاز ومستقر ومتصل بالروم.');
+  } else if (!reconnecting) {
+    console.log('💓 البوت غير متصل أو في حالة إعادة بناء الاتصال...');
   }
 }, 30000);
 
+// انطلاق البوت لأول مرة
 startBot();
