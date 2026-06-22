@@ -36,10 +36,12 @@ client.on('message', async (message) => {
     const senderId = Number(message.sourceSubscriberId);
     const text = getMessageText(message);
 
+    console.log('--------------------');
+    console.log('senderId:', senderId);
+    console.log('text:', text);
+
     if (!text) return;
     if (senderId !== TARGET_USER_ID) return;
-
-    console.log(`📥 Received: ${text}`);
 
     await client.messaging.sendGroupMessage(ROOM_ID, '!عكس');
     console.log('📤 Sent: !عكس');
@@ -49,7 +51,7 @@ client.on('message', async (message) => {
     const reversedText = reverseText(text);
 
     await client.messaging.sendGroupMessage(ROOM_ID, reversedText);
-    console.log(`📤 Sent: ${reversedText}`);
+    console.log('📤 Sent:', reversedText);
 
   } catch (error) {
     console.error('❌ Error:', error);
