@@ -20,25 +20,36 @@ function getMessageText(message) {
   ).trim();
 }
 
+function getRoomId(message) {
+  return Number(
+    message.targetGroupId ||
+    message.groupId ||
+    message.channelId ||
+    message.recipientGroupId ||
+    0
+  );
+}
+
 function reverseText(text) {
   return text.split('').reverse().join('');
 }
 
-client.on('ready', () => {
-  console.log('✅ Bot Connected / الحساب دخل');
-});
-
 client.on('message', async (message) => {
   try {
     const senderId = Number(message.sourceSubscriberId);
+    const roomId = getRoomId(message);
     const text = getMessageText(message);
 
     console.log('--------------------');
     console.log('senderId:', senderId);
+    console.log('roomId:', roomId);
     console.log('text:', text);
 
     if (!text) return;
+    if (roomId !== ROOM_ID) return;
     if (senderId !== TARGET_USER_ID) return;
+
+    console.log('✅ TARGET MATCHED');
 
     await client.messaging.sendGroupMessage(ROOM_ID, '!عكس');
     console.log('📤 Sent: !عكس');
