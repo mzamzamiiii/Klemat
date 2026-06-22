@@ -10,8 +10,9 @@ const service = new WOLF();
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// يمنع البوت من إرسال أكثر من رد في نفس اللحظة
-let isSending = false;
+let queue = [];
+let isProcessing = false;
+let lastText = '';
 
 function getMessageText(message) {
   return (
@@ -40,24 +41,45 @@ function extractWord(text) {
 }
 
 function reverseText(text) {
-  return text.split('').reverse().join('');
+  return [...text].reverse().join('');
 }
 
-// إرسال مع 3 محاولات
 async function send(roomId, text) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
+      await sleep(1500);
       await service.messaging.sendGroupMessage(roomId, text);
       console.log(`✅ تم إرسالها محاولة ${attempt}:`, text);
       return true;
     } catch (err) {
       console.log(`❌ فشل الإرسال محاولة ${attempt}:`, err.message);
-      await sleep(1500);
+      await sleep(2000);
     }
   }
 
-  console.log('❌ فشل الإرسال بعد 3 محاولات:', text);
+  console.log('❌ فشل الإرسال نهائيًا:', text);
   return false;
+}
+
+async function processQueue() {
+  if (isProcessing) return;
+
+  isProcessing = true;
+
+  while (queue.length > 0) {
+    const item = queue.shift();
+
+    console.log('--------------------');
+    console.log('الكلمة:', item.word);
+    console.log('الإجابة:', item.answer);
+
+    await send(item.roomId, item.answer);
+
+    // فاصل بين كل إجابة والثانية
+    await sleep(1200);
+  }
+
+  isProcessing = false;
 }
 
 service.on('message', async (message) => {
@@ -71,41 +93,37 @@ service.on('message', async (message) => {
     if (roomId !== ROOM_ID) return;
     if (senderId !== TARGET_USER_ID) return;
 
+    // منع تكرار نفس رسالة البوت مرتين
+    if (text === lastText) return;
+    lastText = text;
+
     const word = extractWord(text);
     if (!word) return;
 
     const answer = reverseText(word);
 
-    console.log('--------------------');
-    console.log('الكلمة:', word);
-    console.log('الإجابة:', answer);
+    queue.push({
+      roomId,
+      word,
+      answer
+    });
 
-    // إذا كان فيه إرسال شغال، تجاهل الرسالة حتى لا يصير تداخل
-    if (isSending) {
-      console.log('⚠️ تم تجاهل الرسالة لأن البوت يرسل رد سابق');
-      return;
-    }
-
-    isSending = true;
-
-    // تأخير أطول حتى لا يتجاهل WOLF الرسالة
-    await sleep(1200);
-
-    await send(roomId, answer);
-
-    isSending = false;
+    processQueue();
 
   } catch (err) {
     console.log('❌ Message Error:', err.message);
-    isSending = false;
   }
 });
 
 service.on('ready', async () => {
   console.log('✅ الحساب جاهز');
 
-  await sleep(1000);
+  await sleep(2000);
   await send(ROOM_ID, '!عكس');
+});
+
+service.on('disconnected', () => {
+  console.log('⚠️ تم فصل الاتصال من WOLF');
 });
 
 service.login(process.env.U_MAIL_1, process.env.U_PASS_1);
