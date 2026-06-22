@@ -12,31 +12,20 @@ let service = null;
 let queue = [];
 let isProcessing = false;
 let reconnecting = false;
-let isBotReady = false; // مؤشر للتحقق من جاهزية البوت الفعلية
+let isBotReady = false;
+let lastQuestionTime = Date.now(); // حساب وقت آخر سؤال وصلنا
 
-// دالة لتوليد رقم عشوائي بين نطاقين (محاكاة سرعة الكتابة البشرية لتفادي الحظر)
 function getRandomDelay(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function getMessageText(message) {
-  return (
-    message.body ||
-    message.content ||
-    message.text ||
-    message.message ||
-    ''
-  ).trim();
+  return (message.body || message.content || message.text || message.message || '').trim();
 }
 
 function getRoomId(message) {
   return Number(
-    message.targetGroupId ||
-    message.groupId ||
-    message.channelId ||
-    message.recipientGroupId ||
-    message.group?.id ||
-    0
+    message.targetGroupId || message.groupId || message.channelId || message.recipientGroupId || message.group?.id || 0
   );
 }
 
@@ -52,56 +41,43 @@ function reverseText(text) {
 function withTimeout(promise, ms) {
   return Promise.race([
     promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Send timeout')), ms)
-    )
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Send timeout')), ms))
   ]);
 }
 
 async function send(roomId, text) {
   try {
-    if (!service || !isBotReady) {
-      console.log('⏳ تخطي الإرسال لأن البوت ليس جاهزاً بعد');
-      return false;
-    }
+    if (!service || !isBotReady) return false;
 
-    // تأخير ديناميكي عشوائي بين 700ms إلى 1200ms لتفادي فخ الحماية (Anti-Spam)
     const humanDelay = getRandomDelay(700, 1200);
     await sleep(humanDelay);
 
-    const result = await withTimeout(
+    await withTimeout(
       service.messaging.sendGroupMessage(roomId, text),
       5000
     );
 
-    console.log(`✅ تم إرسالها بعد تأخير ${humanDelay}ms:`, text);
+    console.log(`✅ تم إرسال [ ${text} ] بعد تأخير ${humanDelay}ms`);
     return true;
 
   } catch (err) {
-    console.log('❌ فشل/تعليق الإرسال:', err.message);
+    console.log('❌ فشل الإرسال:', err.message);
     return false;
   }
 }
 
 async function processQueue() {
   if (isProcessing) return;
-
   isProcessing = true;
 
   while (queue.length > 0) {
     const item = queue.shift();
-
     console.log('--------------------');
     console.log('الكلمة المستلمة:', item.word);
     console.log('الإجابة المعكوسة:', item.answer);
 
     const success = await send(item.roomId, item.answer);
-    
-    if (!success) {
-      await sleep(2000); // إذا فشل الإرسال ننتظر قليلاً قبل العنصر التالي
-    } else {
-      await sleep(800); // مهلة أمان إضافية بعد نجاح الإرسال لضمان الترتيب
-    }
+    await sleep(success ? 800 : 2000);
   }
 
   isProcessing = false;
@@ -109,7 +85,6 @@ async function processQueue() {
 
 async function restartBot(reason) {
   if (reconnecting) return;
-
   reconnecting = true;
   isBotReady = false;
   console.log('🔄 إعادة تشغيل البوت بسبب:', reason);
@@ -119,12 +94,9 @@ async function restartBot(reason) {
       service.removeAllListeners();
       await service.logout().catch(() => {}); 
     }
-  } catch (err) {
-    console.log('تنظيف العميل القديم:', err.message);
-  }
+  } catch {}
 
-  await sleep(5000); // وقت انتظار كافٍ لاستقرار السيرفر قبل الاتصال الجديد
-
+  await sleep(5000);
   startBot();
 }
 
@@ -137,9 +109,13 @@ function startBot() {
       const roomId = getRoomId(message);
       const text = getMessageText(message);
 
-      if (!text) return;
-      if (!message.isGroup) return;
-      if (roomId !== ROOM_ID) return;
+      if (!text || !message.isGroup || roomId !== ROOM_ID) return;
+
+      // تحديث الوقت عند رؤية أي رسالة جديدة تخص اللعبة لضمان أنها تعمل
+      if (senderId === TARGET_USER_ID) {
+        lastQuestionTime = Date.now(); 
+      }
+
       if (senderId !== TARGET_USER_ID) return;
 
       const word = extractWord(text);
@@ -147,13 +123,8 @@ function startBot() {
 
       const answer = reverseText(word);
 
-      queue.push({
-        roomId,
-        word,
-        answer
-      });
-
-      console.log('📥 دخلت كلمة جديدة إلى الطابور:', word);
+      queue.push({ roomId, word, answer });
+      console.log('📥 كلمة جديدة دخلت الطابور:', word);
 
       processQueue();
 
@@ -166,41 +137,34 @@ function startBot() {
     console.log('✅ الحساب جاهز ومستقر الآن');
     isBotReady = true;
     reconnecting = false; 
+    lastQuestionTime = Date.now();
 
     await sleep(2000);
     await send(ROOM_ID, '!عكس');
   });
 
-  service.on('error', (err) => {
-    console.log('❌ SERVICE ERROR:', err.message || err);
-    restartBot('service error');
-  });
+  service.on('error', () => restartBot('service error'));
+  service.on('disconnected', () => restartBot('disconnected'));
+  service.on('close', () => restartBot('close'));
 
-  service.on('disconnected', () => {
-    console.log('⚠️ تم فصل الاتصال');
-    restartBot('disconnected');
-  });
-
-  service.on('close', () => {
-    console.log('⚠️ تم إغلاق الاتصال');
-    restartBot('close');
-  });
-
-  service.login(process.env.U_MAIL_1, process.env.U_PASS_1).catch((err) => {
-    console.log('❌ فشل تسجيل الدخول:', err.message);
+  service.login(process.env.U_MAIL_1, process.env.U_PASS_1).catch(() => {
     reconnecting = false;
     restartBot('login failed');
   });
 }
 
-// مراقب نبضات القلب الذكي: يفحص هل البوت متصل فعلياً بالمنصة أم لا كل 30 ثانية
-setInterval(() => {
-  if (service && isBotReady) {
-    console.log('💓 البوت يعمل بشكل ممتاز ومستقر ومتصل بالروم.');
-  } else if (!reconnecting) {
-    console.log('💓 البوت غير متصل أو في حالة إعادة بناء الاتصال...');
+// مراقب الذكاء والتخطي التلقائي:
+// إذا مرت 15 ثانية واللعبة معلقة على كلمة خربانة، يرسل !عكس لتوليد كلمة جديدة وتنشيط اللعبة
+setInterval(async () => {
+  if (service && isBotReady && !isProcessing && queue.length === 0) {
+    const timeSinceLastQuestion = Date.now() - lastQuestionTime;
+    
+    if (timeSinceLastQuestion > 15000) { 
+      console.log('⚠️ اللعبة يبدو أنها علقت على كلمة معطوبة. جاري التنشيط التلقائي...');
+      lastQuestionTime = Date.now(); // تصفير العداد مؤقتاً
+      await send(ROOM_ID, '!عكس');
+    }
   }
-}, 30000);
+}, 5000);
 
-// انطلاق البوت لأول مرة
 startBot();
