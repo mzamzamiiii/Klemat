@@ -5,11 +5,8 @@ const { WOLF } = wolfjs;
 
 const service = new WOLF();
 
-// =====================
-// الإعدادات
-// =====================
-const ROOM_ID = 81971125;        // رقم الغرفة
-const TARGET_USER_ID = 82641759; // آيدي بوت الكلمات
+const ROOM_ID = 81971125;
+const TARGET_USER_ID = 82641759;
 
 const START_COMMAND = '!كلمات';
 const FIRST_GUESS = 'سلامة';
@@ -23,15 +20,7 @@ function getMessageText(message) {
 }
 
 function getSenderId(message) {
-  return (
-    message.sourceSubscriberId ||
-    message.senderId ||
-    message.from ||
-    message.userId ||
-    message.authorId ||
-    message.originatorId ||
-    null
-  );
+  return message.sourceSubscriberId || null;
 }
 
 async function sendToRoom(text) {
@@ -39,9 +28,28 @@ async function sendToRoom(text) {
   console.log(`📤 تم الإرسال: ${text}`);
 }
 
-// =====================
-// عند تسجيل الدخول
-// =====================
+function parseWolfdleResult(html) {
+  const results = [];
+
+  const regex = /<div class="wolfdlebot-mp-game__content__container__item ([^"]+)" lang="ar">([^<]*)<\/div>/g;
+
+  let match;
+
+  while ((match = regex.exec(html)) !== null) {
+    const status = match[1];
+    const letter = match[2];
+
+    if (!letter) continue;
+
+    results.push({
+      letter,
+      status
+    });
+  }
+
+  return results.slice(0, 5);
+}
+
 service.on('ready', async () => {
   console.log('✅ الحساب جاهز');
 
@@ -61,16 +69,9 @@ service.on('ready', async () => {
   }
 });
 
-// =====================
-// استقبال الرسائل
-// =====================
 service.on('message', async (message) => {
   const senderId = getSenderId(message);
   const text = getMessageText(message);
-
-  console.log('📩 رسالة مختصرة');
-  console.log('👤 senderId:', senderId);
-  console.log('📝 text:', text);
 
   if (String(senderId) !== String(TARGET_USER_ID)) return;
 
@@ -81,18 +82,21 @@ service.on('message', async (message) => {
 
   if (!guessSent) return;
 
+  const result = parseWolfdleResult(text);
+
   console.log('');
-  console.log('========== WORD BOT RESULT ==========');
-  console.log(JSON.stringify(message, null, 2));
-  console.log('=====================================');
+  console.log('========== RESULT ==========');
+
+  for (const item of result) {
+    console.log(`${item.letter} = ${item.status}`);
+  }
+
+  console.log('============================');
   console.log('');
 
   process.exit(0);
 });
 
-// =====================
-// تسجيل الدخول
-// =====================
 service.login(
   process.env.U_MAIL_1,
   process.env.U_PASS_1
