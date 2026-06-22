@@ -46,7 +46,7 @@ async function send(roomId, text) {
     if (!service || !isBotReady) return false;
 
     // تم ضبط المهلة على 400ms ثابتة بناءً على طلبك لزيادة السرعة وحصد النقاط
-    const fixedDelay = 400;
+    const fixedDelay = 300;
     await sleep(fixedDelay);
 
     await withTimeout(
