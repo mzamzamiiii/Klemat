@@ -8,10 +8,9 @@ const TARGET_USER_ID = 75423789;
 
 const service = new WOLF();
 
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
+let currentRound = 0;
+let timeoutTimer = null;
 let isSolving = false;
-let lastWord = '';
 
 function getMessageText(message) {
   return (
@@ -43,13 +42,20 @@ function reverseText(text) {
   return text.split('').reverse().join('');
 }
 
-async function sendMessage(roomId, text) {
+function clearOldTimer() {
+  if (timeoutTimer) {
+    clearTimeout(timeoutTimer);
+    timeoutTimer = null;
+  }
+}
+
+async function sendMsg(roomId, text) {
   await service.messaging.sendGroupMessage(roomId, text);
 }
 
 async function requestNewWord(roomId) {
   try {
-    await sendMessage(roomId, '!عكس');
+    await sendMsg(roomId, '!عكس');
     console.log('📤 طلب كلمة جديدة: !عكس');
   } catch (err) {
     console.log('❌ خطأ طلب كلمة:', err.message);
@@ -65,26 +71,32 @@ service.on('message', async (message) => {
     if (!text) return;
     if (!message.isGroup) return;
     if (roomId !== ROOM_ID) return;
+    if (senderId !== TARGET_USER_ID) return;
 
-    // إذا البوت أعلن نتيجة، نسمح بحل الكلمة التالية
+    // إذا ظهرت نتيجة، نلغي مؤقت إعادة !عكس
     if (
-      senderId === TARGET_USER_ID &&
-      (text.includes('مبارك') || text.includes('انتهت') || text.includes('النقاط'))
+      text.includes('مبارك') ||
+      text.includes('أجبت') ||
+      text.includes('حصلت') ||
+      text.includes('نقطة') ||
+      text.includes('النقاط')
     ) {
+      clearOldTimer();
       isSolving = false;
+      console.log('✅ ظهرت نتيجة، ننتظر الكلمة التالية');
       return;
     }
-
-    if (senderId !== TARGET_USER_ID) return;
 
     const word = extractWord(text);
     if (!word) return;
 
-    // منع تكرار نفس الكلمة
-    if (word === lastWord && isSolving) return;
+    // وصلت كلمة جديدة، نلغي أي مؤقت قديم
+    clearOldTimer();
+
+    currentRound++;
+    const roundId = currentRound;
 
     isSolving = true;
-    lastWord = word;
 
     const answer = reverseText(word);
 
@@ -93,17 +105,16 @@ service.on('message', async (message) => {
     console.log('الإجابة:', answer);
 
     try {
-      await sendMessage(roomId, answer);
+      await sendMsg(roomId, answer);
       console.log('✅ تم إرسال الإجابة:', answer);
 
-      // مهلة قصيرة، إذا ما ظهرت نتيجة غالباً الإرسال لم يُقبل
-      setTimeout(async () => {
-        if (isSolving && lastWord === word) {
-          console.log('⚠️ لم تظهر نتيجة، بطلب كلمة جديدة');
+      timeoutTimer = setTimeout(async () => {
+        if (isSolving && currentRound === roundId) {
+          console.log('⚠️ لم تظهر نتيجة لهذه الكلمة، بطلب كلمة جديدة');
           isSolving = false;
           await requestNewWord(roomId);
         }
-      }, 1500);
+      }, 2000);
 
     } catch (err) {
       console.log('❌ فشل إرسال الإجابة:', err.message);
@@ -118,7 +129,6 @@ service.on('message', async (message) => {
 
 service.on('ready', async () => {
   console.log('✅ الحساب جاهز');
-  await sleep(1000);
   await requestNewWord(ROOM_ID);
 });
 
