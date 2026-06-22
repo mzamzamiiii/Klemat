@@ -8,9 +8,8 @@ const TARGET_USER_ID = 75423789;
 
 const service = new WOLF();
 
-let currentRound = 0;
-let timeoutTimer = null;
-let isSolving = false;
+let roundId = 0;
+let solved = true;
 
 function getMessageText(message) {
   return (
@@ -42,24 +41,8 @@ function reverseText(text) {
   return text.split('').reverse().join('');
 }
 
-function clearOldTimer() {
-  if (timeoutTimer) {
-    clearTimeout(timeoutTimer);
-    timeoutTimer = null;
-  }
-}
-
-async function sendMsg(roomId, text) {
+async function send(roomId, text) {
   await service.messaging.sendGroupMessage(roomId, text);
-}
-
-async function requestNewWord(roomId) {
-  try {
-    await sendMsg(roomId, '!عكس');
-    console.log('📤 طلب كلمة جديدة: !عكس');
-  } catch (err) {
-    console.log('❌ خطأ طلب كلمة:', err.message);
-  }
 }
 
 service.on('message', async (message) => {
@@ -73,30 +56,23 @@ service.on('message', async (message) => {
     if (roomId !== ROOM_ID) return;
     if (senderId !== TARGET_USER_ID) return;
 
-    // إذا ظهرت نتيجة، نلغي مؤقت إعادة !عكس
     if (
       text.includes('مبارك') ||
       text.includes('أجبت') ||
       text.includes('حصلت') ||
-      text.includes('نقطة') ||
-      text.includes('النقاط')
+      text.includes('نقطة')
     ) {
-      clearOldTimer();
-      isSolving = false;
-      console.log('✅ ظهرت نتيجة، ننتظر الكلمة التالية');
+      solved = true;
+      console.log('✅ ظهرت نتيجة');
       return;
     }
 
     const word = extractWord(text);
     if (!word) return;
 
-    // وصلت كلمة جديدة، نلغي أي مؤقت قديم
-    clearOldTimer();
-
-    currentRound++;
-    const roundId = currentRound;
-
-    isSolving = true;
+    roundId++;
+    const thisRound = roundId;
+    solved = false;
 
     const answer = reverseText(word);
 
@@ -104,23 +80,30 @@ service.on('message', async (message) => {
     console.log('الكلمة:', word);
     console.log('الإجابة:', answer);
 
-    try {
-      await sendMsg(roomId, answer);
-      console.log('✅ تم إرسال الإجابة:', answer);
+    await send(roomId, answer);
+    console.log('📤 أرسل الإجابة:', answer);
 
-      timeoutTimer = setTimeout(async () => {
-        if (isSolving && currentRound === roundId) {
-          console.log('⚠️ لم تظهر نتيجة لهذه الكلمة، بطلب كلمة جديدة');
-          isSolving = false;
-          await requestNewWord(roomId);
+    setTimeout(async () => {
+      if (!solved && roundId === thisRound) {
+        try {
+          console.log('🔁 إعادة إرسال الإجابة:', answer);
+          await send(roomId, answer);
+        } catch (err) {
+          console.log('❌ خطأ إعادة الإرسال:', err.message);
         }
-      }, 2000);
+      }
+    }, 600);
 
-    } catch (err) {
-      console.log('❌ فشل إرسال الإجابة:', err.message);
-      isSolving = false;
-      await requestNewWord(roomId);
-    }
+    setTimeout(async () => {
+      if (!solved && roundId === thisRound) {
+        try {
+          console.log('⚠️ لم تنحل، طلب كلمة جديدة');
+          await send(roomId, '!عكس');
+        } catch (err) {
+          console.log('❌ خطأ طلب كلمة جديدة:', err.message);
+        }
+      }
+    }, 1300);
 
   } catch (err) {
     console.log('❌ Message Error:', err.message);
@@ -129,7 +112,7 @@ service.on('message', async (message) => {
 
 service.on('ready', async () => {
   console.log('✅ الحساب جاهز');
-  await requestNewWord(ROOM_ID);
+  await send(ROOM_ID, '!عكس');
 });
 
 service.login(process.env.U_MAIL_1, process.env.U_PASS_1);
